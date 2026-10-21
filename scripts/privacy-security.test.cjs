@@ -83,3 +83,29 @@ test('diagnostic endpoints remain disabled', async () => {
     const route = load(path); assert.equal((await route.GET()).status, 404); assert.equal((await route.POST()).status, 404);
   }
 });
+
+test('connect form redirects to Shopify with 303, preserving OAuth state binding', async () => {
+  let binding;
+  const route = load('app/api/auth/route.ts', {
+    'next/server': { NextResponse: { json: Response.json, redirect: (url, status = 307) => Response.redirect(url, status) } },
+    'next/headers': { cookies: async () => ({ set: (_name, value) => { binding = JSON.parse(value); } }) },
+    '@/lib/security/access': { currentUser: async () => ({ uid: 'owner' }), storeCollection: () => 'test', sameOrigin() {}, apiError: () => Response.json({}, { status: 500 }) },
+    '@/lib/firebase/admin': { getAdminDb: () => database(undefined).db },
+    '@/lib/shopify/config': { normaliseShop: value => value, SHOPIFY_API_KEY: () => 'key', SHOPIFY_REDIRECT_URI: () => 'https://app.test/api/auth/callback', SHOPIFY_SCOPES: () => 'read_orders,read_customers', SHOPIFY_STATE_COOKIE: 'state', SHOPIFY_STATE_COOKIE_MAX_AGE: 600 },
+  }, { crypto: require('node:crypto').webcrypto });
+  const form = new URLSearchParams({ shop: 'test.myshopify.com', privacy: '2026-10-22' });
+  const response = await route.POST(new Request('https://app.test/api/auth', { method: 'POST', body: form }));
+  assert.equal(response.status, 303);
+  const target = new URL(response.headers.get('location'));
+  assert.equal(target.hostname, 'test.myshopify.com'); assert.equal(target.pathname, '/admin/oauth/authorize');
+  assert.equal(binding.uid, 'owner'); assert.equal(binding.shop, 'test.myshopify.com'); assert.equal(target.searchParams.get('state'), binding.state);
+});
+
+test('missing deployment environment uses test data; production remains explicit', () => {
+  const dependencies = { 'server-only': {}, 'next/headers': {}, 'firebase-admin/auth': {}, 'next/navigation': {}, '@/lib/firebase/admin': {}, '@/lib/firebase/constants': {} };
+  const env = { NODE_ENV: 'production' };
+  const access = load('lib/security/access.ts', dependencies, { process: { env } });
+  assert.equal(access.storeCollection(), 'shopify_installs');
+  env.APP_DATA_ENV = 'production'; assert.equal(access.storeCollection(), 'shopify_installs_production');
+  env.APP_DATA_ENV = 'typo'; assert.throws(access.storeCollection, /APP_DATA_ENV/);
+});

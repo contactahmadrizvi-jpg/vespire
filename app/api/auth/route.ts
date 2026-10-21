@@ -15,7 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { pageUser, storeCollection, sameOrigin, apiError } from "@/lib/security/access";
+import { currentUser, storeCollection, sameOrigin, apiError } from "@/lib/security/access";
 import { getAdminDb } from "@/lib/firebase/admin";
 import {
   normaliseShop,
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function startOAuth(request: { url: string; nextUrl: URL }) {
-  const user = await pageUser();
+  const user = await currentUser();
   const { searchParams } = request.nextUrl;
   const rawShop = searchParams.get("shop");
 
@@ -67,7 +67,7 @@ async function startOAuth(request: { url: string; nextUrl: URL }) {
   }
 
   if (searchParams.get("privacy") !== "2026-10-22") {
-    return NextResponse.redirect(new URL(`/connect?shop=${encodeURIComponent(shop)}`, request.url));
+    return NextResponse.redirect(new URL(`/connect?shop=${encodeURIComponent(shop)}`, request.url), 303);
   }
   const existing = await getAdminDb().collection(storeCollection()).doc(shop).get();
   if (existing.data()?.ownerUid && existing.data()?.ownerUid !== user.uid) {
@@ -101,5 +101,6 @@ async function startOAuth(request: { url: string; nextUrl: URL }) {
   // Offline access is the default; the code exchange requests expiration.
 
 
-  return NextResponse.redirect(authUrl.toString());
+  // The form submits POST; Shopify's authorization endpoint expects GET.
+  return NextResponse.redirect(authUrl.toString(), 303);
 }

@@ -23,9 +23,10 @@ export async function pageUser() {
 
 export function storeCollection() {
   const environment = process.env.APP_DATA_ENV;
-  if (process.env.NODE_ENV === "production" && !["production", "test"].includes(environment ?? "")) {
-    throw new Error("Set APP_DATA_ENV to production or test before deployment.");
+  if (environment && !["production", "test"].includes(environment)) {
+    throw new Error("APP_DATA_ENV must be production or test.");
   }
+  // An unconfigured deployment remains in the test namespace. Live data is opt-in.
   return environment === "production" ? "shopify_installs_production" : "shopify_installs";
 }
 

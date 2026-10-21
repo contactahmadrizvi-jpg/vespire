@@ -11,7 +11,7 @@ This is a focused readiness report for protected customer data, not a full App S
 - Customer order/checkout records fetched only for the last 30 days. Expired cached records removed on reads and by the scheduled retention endpoint. Audit metadata expires after 90 days and privacy request metadata after 30 days.
 - Raw-body HMAC verified before processing customers/data_request, customers/redact, shop/redact and app/uninstalled. Invalid signatures return 401. Failed processing is retryable. Customer deletion markers prevent subsequent sync from re-importing deleted records. Suppression IDs remain until store disconnection/uninstall to enforce the deletion request.
 - Account-scoped data request download and manual fulfillment tracking. Exports exclude credentials. The operator/merchant must verify recipients and deliver exports securely; downloads do not automatically fulfill a request.
-- Default-deny Firestore client rules supplied. Test and production collection namespaces separated; production requires an explicit APP_DATA_ENV setting.
+- Default-deny Firestore client rules supplied. Test and production collection namespaces separated; live production data requires APP_DATA_ENV=production; an unset value safely uses test data.
 - Public /privacy and /terms pages identify Ahmad Hassan and contactahmadrizvi@gmail.com.
 
 ## Required before production — do not claim these are verified
