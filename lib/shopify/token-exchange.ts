@@ -53,23 +53,38 @@ export async function exchangeCodeForToken(
 ): Promise<ShopifyAccessTokenResponse> {
   const url = `https://${shop}/admin/oauth/access_token`;
 
+  const requestBody = {
+    client_id: SHOPIFY_API_KEY(),
+    client_secret: SHOPIFY_API_SECRET(),
+    code,
+    // Request expiring offline tokens (required as of API version 2025-01)
+    // See: https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens
+    grant_options: ["offline"],
+  };
+
+  console.log(`[Token Exchange] 🔄 Requesting token from Shopify...`);
+  console.log(`[Token Exchange] 📝 Request body includes:`, {
+    client_id: requestBody.client_id ? 'present' : 'MISSING',
+    client_secret: requestBody.client_secret ? 'present' : 'MISSING',
+    code: code ? `${code.substring(0, 15)}...` : 'MISSING',
+    grant_options: requestBody.grant_options,
+  });
+
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: SHOPIFY_API_KEY(),
-      client_secret: SHOPIFY_API_SECRET(),
-      code,
-      // Request expiring offline tokens (required as of API version 2025-01)
-      // See: https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens
-      grant_options: ["offline"],
-    }),
+    body: JSON.stringify(requestBody),
     // Abort if Shopify doesn't respond in 15 s
     signal: AbortSignal.timeout(15_000),
   });
 
   if (!response.ok) {
     const body = await response.text().catch(() => "(no body)");
+    console.error(`[Token Exchange] ❌ Shopify returned error:`, {
+      status: response.status,
+      statusText: response.statusText,
+      body: body,
+    });
     throw new Error(
       `Shopify token exchange failed [${response.status}]: ${body}`,
     );
@@ -77,10 +92,22 @@ export async function exchangeCodeForToken(
 
   const data = (await response.json()) as ShopifyAccessTokenResponse;
 
+  console.log(`[Token Exchange] ✅ Token received from Shopify:`, {
+    hasAccessToken: !!data.access_token,
+    scope: data.scope,
+    expiresIn: data.expires_in,
+    hasExpiresIn: data.expires_in !== undefined,
+  });
+
   if (!data.access_token) {
+    console.error(`[Token Exchange] ❌ No access_token in response:`, data);
     throw new Error(
       "Shopify token exchange succeeded but response contained no access_token.",
     );
+  }
+
+  if (!data.expires_in) {
+    console.warn(`[Token Exchange] ⚠️ WARNING: No expires_in in response! Shopify returned non-expiring token despite grant_options!`);
   }
 
   return data;

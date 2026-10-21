@@ -85,16 +85,36 @@ export async function GET(request: NextRequest) {
   let scope: string;
   let expiresIn: number | undefined;
   try {
+    console.log(`[Shopify OAuth] 🔄 Starting token exchange for: ${shop}`);
+    console.log(`[Shopify OAuth] 📝 Code received: ${code.substring(0, 20)}...`);
+    
     const tokenResponse = await exchangeCodeForToken(shop, code);
+    
+    console.log(`[Shopify OAuth] 📦 Token response received:`, {
+      hasAccessToken: !!tokenResponse.access_token,
+      scope: tokenResponse.scope,
+      expiresIn: tokenResponse.expires_in,
+      tokenPrefix: tokenResponse.access_token?.substring(0, 10),
+    });
+    
     accessToken = tokenResponse.access_token;
     scope       = tokenResponse.scope;
     expiresIn   = tokenResponse.expires_in;
+    
     console.log(
-      `[Shopify OAuth] Token exchange successful for shop: ${shop}. ` +
-      `Scopes: ${scope}, Expires in: ${expiresIn ? `${expiresIn}s` : 'never'}`,
+      `[Shopify OAuth] ✅ Token exchange successful for shop: ${shop}. ` +
+      `Scopes: ${scope}, Expires in: ${expiresIn ? `${expiresIn}s (${Math.round(expiresIn / 86400)} days)` : 'NEVER - THIS IS BAD!'}`,
     );
+    
+    if (!expiresIn) {
+      console.warn(`[Shopify OAuth] ⚠️ WARNING: Received non-expiring token! grant_options may not be working!`);
+    }
   } catch (err) {
-    console.error("[Shopify OAuth] Token exchange error:", err);
+    console.error("[Shopify OAuth] ❌ Token exchange error:", err);
+    console.error("[Shopify OAuth] ❌ Error details:", {
+      message: (err as Error).message,
+      stack: (err as Error).stack,
+    });
     return errorResponse(
       `Failed to exchange authorization code: ${(err as Error).message}`,
       500,
