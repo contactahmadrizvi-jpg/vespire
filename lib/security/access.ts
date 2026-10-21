@@ -46,7 +46,21 @@ export async function audit(uid: string, shop: string, action: string) {
 }
 
 export function sameOrigin(request: Request) {
-  if (request.headers.get("origin") !== new URL(request.url).origin) throw new AccessError(403, "Request origin rejected.");
+  // Vercel can expose an internal request URL behind its public deployment host.
+  // Only trust deployment configuration, never client-supplied forwarded headers.
+  const allowed = new Set([new URL(request.url).origin]);
+  for (const configured of [process.env.APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`]) {
+    if (!configured) continue;
+    try {
+      const url = new URL(configured);
+      if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) allowed.add(url.origin);
+    } catch { /* Invalid configuration must not weaken origin verification. */ }
+  }
+  const origin = request.headers.get("origin");
+  if (!origin || !allowed.has(origin)) throw new AccessError(403, "Request origin rejected.");
+  return origin;
 }
 
 export function apiError(error: unknown) {

@@ -109,7 +109,7 @@ test('connect form redirects to Shopify with 303, preserving OAuth state binding
   const route = load('app/api/auth/route.ts', {
     'next/server': { NextResponse: { json: Response.json, redirect: (url, status = 307) => Response.redirect(url, status) } },
     'next/headers': { cookies: async () => ({ set: (_name, value) => { binding = JSON.parse(value); } }) },
-    '@/lib/security/access': { currentUser: async () => ({ uid: 'owner' }), storeCollection: () => 'test', sameOrigin() {}, apiError: () => Response.json({}, { status: 500 }) },
+    '@/lib/security/access': { currentUser: async () => ({ uid: 'owner' }), storeCollection: () => 'test', sameOrigin: () => 'https://app.test', apiError: () => Response.json({}, { status: 500 }) },
     '@/lib/firebase/admin': { getAdminDb: () => database(undefined).db },
     '@/lib/shopify/config': { normaliseShop: value => value, SHOPIFY_API_KEY: () => 'key', SHOPIFY_REDIRECT_URI: () => 'https://app.test/api/auth/callback', SHOPIFY_SCOPES: () => 'read_orders,read_customers', SHOPIFY_STATE_COOKIE: 'state', SHOPIFY_STATE_COOKIE_MAX_AGE: 600 },
   }, { crypto: require('node:crypto').webcrypto });
@@ -128,4 +128,15 @@ test('missing deployment environment uses test data; production remains explicit
   assert.equal(access.storeCollection(), 'shopify_installs');
   env.APP_DATA_ENV = 'production'; assert.equal(access.storeCollection(), 'shopify_installs_production');
   env.APP_DATA_ENV = 'typo'; assert.throws(access.storeCollection, /APP_DATA_ENV/);
+});
+
+test('origin verification accepts configured Vercel hosts but rejects forged or absent origins', () => {
+  const dependencies = { 'server-only': {}, 'next/headers': {}, 'firebase-admin/auth': {}, 'next/navigation': {}, '@/lib/firebase/admin': {}, '@/lib/firebase/constants': {} };
+  const access = load('lib/security/access.ts', dependencies, { process: { env: { VERCEL_PROJECT_PRODUCTION_URL: 'vespire.vercel.app', VERCEL_URL: 'vespire-preview.vercel.app' } } });
+  const request = origin => new Request('http://internal:3000/api/shopify/disconnect', { headers: { ...(origin ? { origin } : {}), 'x-forwarded-host': 'evil.example' } });
+  assert.equal(access.sameOrigin(request('https://vespire.vercel.app')), 'https://vespire.vercel.app');
+  assert.equal(access.sameOrigin(request('https://vespire-preview.vercel.app')), 'https://vespire-preview.vercel.app');
+  for (const origin of [undefined, 'null', 'https://evil.example', 'https://vespire.vercel.app.evil.example', 'http://vespire.vercel.app']) {
+    assert.throws(() => access.sameOrigin(request(origin)), error => error.status === 403);
+  }
 });

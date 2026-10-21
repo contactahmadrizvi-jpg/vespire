@@ -34,9 +34,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    sameOrigin(request);
+    const origin = sameOrigin(request);
     const form = await request.formData();
-    const url = new URL(request.url);
+    const url = new URL("/api/auth", origin);
     url.searchParams.set("shop", String(form.get("shop") ?? ""));
     url.searchParams.set("privacy", String(form.get("privacy") ?? ""));
     return await startOAuth({ url: url.toString(), nextUrl: url });

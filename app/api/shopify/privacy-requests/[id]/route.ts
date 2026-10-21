@@ -24,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    sameOrigin(request);
+    const origin = sameOrigin(request);
     const user = await currentUser();
     const { id } = await params;
     const ref = getAdminDb().collection(`${storeCollection()}_privacy_requests`).doc(id);
@@ -33,6 +33,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await ownedStore(data.shop, user.uid);
     await audit(user.uid, data.shop, "customer_data.request_fulfilled");
     await ref.update({ status: "fulfilled", fulfilledAt: new Date() });
-    return Response.redirect(new URL("/shopify/privacy-requests", request.url), 303);
+    return Response.redirect(new URL("/shopify/privacy-requests", origin), 303);
   } catch (error) { return apiError(error); }
 }

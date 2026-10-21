@@ -11,7 +11,7 @@ import { normaliseShop } from "@/lib/shopify/config";
  */
 export async function POST(request: NextRequest) {
   try {
-    sameOrigin(request);
+    const origin = sameOrigin(request);
     const user = await currentUser();
     const formData = await request.formData();
     const shop = normaliseShop(String(formData.get("shop") ?? ""));
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Shopify] ✅ Disconnected store: ${shop}`);
 
     // Redirect to install page
-    const installUrl = new URL("/install", request.url);
+    const installUrl = new URL("/install", origin);
     return NextResponse.redirect(installUrl, 303);
   } catch (error) {
     return apiError(error);
