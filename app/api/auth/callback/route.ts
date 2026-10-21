@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
     const updates: Record<string, unknown> = { syncErrors: data.errors };
     if (!data.errors.products) updates.products = data.products;
     if (!data.errors.orders) updates.orders = data.orders;
+    if (!data.errors.abandonedCheckouts) updates.abandoned_checkouts = data.abandonedCheckouts;
     if (Object.keys(data.errors).length === 0) updates.lastDataFetch = new Date().toISOString();
     await getAdminDb().collection("shopify_installs").doc(shop).update(updates);
   } catch (err) {

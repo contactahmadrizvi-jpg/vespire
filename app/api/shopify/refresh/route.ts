@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
     const updates: Record<string, unknown> = { syncErrors: data.errors };
     if (!data.errors.products) updates.products = data.products;
     if (!data.errors.orders) updates.orders = data.orders;
+    if (!data.errors.abandonedCheckouts) updates.abandoned_checkouts = data.abandonedCheckouts;
     if (Object.keys(data.errors).length === 0) updates.lastDataFetch = new Date().toISOString();
     await db.collection("shopify_installs").doc(shop).update(updates);
 
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
       counts: {
         products: data.products.length,
         orders: data.orders.length,
+        abandonedCheckouts: data.abandonedCheckouts.length,
       },
     });
   } catch (error) {

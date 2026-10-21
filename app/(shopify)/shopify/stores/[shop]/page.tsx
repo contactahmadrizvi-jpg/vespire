@@ -37,7 +37,9 @@ interface Order {
 
 interface AbandonedCheckout {
   id: string;
-  email: string;
+  name?: string;
+  email?: string;
+  currency?: string;
   total_price: string;
   created_at: string;
   line_items: Array<{
@@ -120,7 +122,7 @@ export default async function StoreDetailPage({
           <div className="mt-2 text-3xl font-bold text-zinc-900 dark:text-zinc-50">{orders.length}</div>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Abandoned Carts</div>
+          <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Abandoned Checkouts</div>
           <div className="mt-2 text-3xl font-bold text-zinc-900 dark:text-zinc-50">{abandonedCheckouts.length}</div>
         </div>
       </div>
@@ -229,10 +231,11 @@ export default async function StoreDetailPage({
 
       {/* Abandoned Checkouts */}
       <section>
-        <h2 className="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-50">Abandoned Carts</h2>
+        <p className="mb-3 text-sm text-zinc-500">Checkouts where a buyer provided contact details but did not finish purchasing.</p>
+        <h2 className="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-50">Abandoned Checkouts</h2>
         {abandonedCheckouts.length === 0 ? (
           <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-800 dark:bg-zinc-950">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No abandoned carts found</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">No abandoned checkouts found</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -244,13 +247,13 @@ export default async function StoreDetailPage({
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-zinc-900 dark:text-zinc-50">{checkout.email}</span>
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-50">{checkout.name || checkout.email || "Abandoned checkout"}</span>
                       <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-400">
                         Abandoned
                       </span>
                     </div>
                     <div className="mt-2 space-y-1">
-                      {checkout.line_items.map((item, idx) => (
+                      {(checkout.line_items ?? []).map((item, idx) => (
                         <p key={idx} className="text-xs text-zinc-600 dark:text-zinc-400">
                           {item.quantity}x {item.title}
                         </p>
@@ -259,7 +262,7 @@ export default async function StoreDetailPage({
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
-                      ${checkout.total_price}
+                      {checkout.currency || "$"} {checkout.total_price}
                     </div>
                     <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                       {new Date(checkout.created_at).toLocaleDateString()}
@@ -272,7 +275,7 @@ export default async function StoreDetailPage({
         )}
         {abandonedCheckouts.length > 5 && (
           <p className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Showing 5 of {abandonedCheckouts.length} abandoned carts
+            Showing 5 of {abandonedCheckouts.length} abandoned checkouts
           </p>
         )}
       </section>

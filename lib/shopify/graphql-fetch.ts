@@ -224,6 +224,69 @@ export async function fetchOrdersGraphQL(
 /**
  * Transform GraphQL product data to match UI expectations (snake_case)
  */
+export interface AbandonedCheckout {
+  id: string;
+  name: string;
+  created_at: string;
+  total_price: string;
+  currency: string;
+  line_items: Array<{ title: string; quantity: number }>;
+}
+
+interface CheckoutNode {
+  id: string;
+  name: string;
+  createdAt: string;
+  completedAt: string | null;
+  totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+  lineItems: { nodes: Array<{ title: string | null; quantity: number }> };
+}
+
+/** Shopify exposes abandoned checkouts after the buyer provides contact details. */
+export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: string): Promise<AbandonedCheckout[]> {
+  const query = `
+    query GetAbandonedCheckouts($first: Int!, $after: String) {
+      abandonedCheckouts(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
+        nodes {
+          id
+          name
+          createdAt
+          completedAt
+          totalPriceSet { shopMoney { amount currencyCode } }
+          lineItems(first: 100) { nodes { title quantity } }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  `;
+  const checkouts: AbandonedCheckout[] = [];
+  let after: string | null = null;
+  while (true) {
+    const data = await graphqlRequest(shop, accessToken, query, { first: 25, after });
+    const connection = data.abandonedCheckouts as {
+      nodes: CheckoutNode[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    };
+    for (const checkout of connection.nodes) {
+      if (checkout.completedAt) continue;
+      checkouts.push({
+        id: checkout.id,
+        name: checkout.name,
+        created_at: checkout.createdAt,
+        total_price: checkout.totalPriceSet.shopMoney.amount,
+        currency: checkout.totalPriceSet.shopMoney.currencyCode,
+        line_items: checkout.lineItems.nodes.map(item => ({ title: item.title ?? "Item", quantity: item.quantity })),
+      });
+    }
+    if (!connection.pageInfo.hasNextPage) break;
+    if (!connection.pageInfo.endCursor || connection.pageInfo.endCursor === after) {
+      throw new Error("Shopify could not load the next page of abandoned checkouts. Please retry.");
+    }
+    after = connection.pageInfo.endCursor;
+  }
+  return checkouts;
+}
+
 function transformProduct(product: any): any {
   return {
     id: product.id,
@@ -271,19 +334,28 @@ export async function fetchAllShopDataGraphQL(
 ): Promise<{
   products: any[];
   orders: any[];
-  errors: Partial<Record<"products" | "orders", string>>;
+  abandonedCheckouts: AbandonedCheckout[];
+  errors: Partial<Record<"products" | "orders" | "abandonedCheckouts", string>>;
 }> {
   const results = await Promise.allSettled([
     fetchProductsGraphQL(shop, accessToken),
     fetchOrdersGraphQL(shop, accessToken),
+    fetchAbandonedCheckoutsGraphQL(shop, accessToken),
   ]);
-  const errors: Partial<Record<"products" | "orders", string>> = {};
-  const [productResult, orderResult] = results;
+  const errors: Partial<Record<"products" | "orders" | "abandonedCheckouts", string>> = {};
+  const [productResult, orderResult, checkoutResult] = results;
   if (productResult.status === "rejected") errors.products = String(productResult.reason?.message || productResult.reason);
   if (orderResult.status === "rejected") errors.orders = String(orderResult.reason?.message || orderResult.reason);
+  if (checkoutResult.status === "rejected") {
+    const message = String(checkoutResult.reason?.message || checkoutResult.reason);
+    errors.abandonedCheckouts = message.includes("not approved to access the AbandonedCheckout object")
+      ? "Shopify approval is required. In the Shopify Dev Dashboard, open this app and request protected customer data access for abandoned checkouts, then refresh again."
+      : message;
+  }
   return {
     products: productResult.status === "fulfilled" ? productResult.value.map(transformProduct) : [],
     orders: orderResult.status === "fulfilled" ? orderResult.value.map(transformOrder) : [],
+    abandonedCheckouts: checkoutResult.status === "fulfilled" ? checkoutResult.value : [],
     errors,
   };
 }
