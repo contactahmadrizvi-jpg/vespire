@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   experimental: {
     agentFeedback: true,
   },
-  cacheComponents: true,
-  partialPrefetching: true,
+  // cacheComponents and partialPrefetching removed — cacheComponents is
+  // incompatible with route segment config exports (dynamic, runtime, etc.)
+  // used in API routes and dynamic server pages.
   turbopack: {
     rules: {
       "*.css": {
