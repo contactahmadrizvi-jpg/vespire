@@ -71,5 +71,10 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set("redirect_uri", SHOPIFY_REDIRECT_URI());
   authUrl.searchParams.set("state", state);
 
+  // Debug log - check Vercel function logs to see actual values
+  console.log('[OAuth] Redirect URI:', SHOPIFY_REDIRECT_URI());
+  console.log('[OAuth] APP_URL:', APP_URL());
+  console.log('[OAuth] Full auth URL:', authUrl.toString());
+
   return NextResponse.redirect(authUrl.toString());
 }
