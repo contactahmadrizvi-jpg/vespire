@@ -91,7 +91,7 @@ export async function fetchProductsGraphQL(
 ): Promise<any[]> {
   const query = `
     query GetProducts($first: Int!, $after: String) {
-      products(first: $first, after: $after) {
+      products(first: $first, after: $after, query: "status:active OR status:draft") {
         edges {
           node {
             id
@@ -126,20 +126,33 @@ export async function fetchProductsGraphQL(
   let hasNextPage = true;
   let cursor: string | null = null;
 
-  while (hasNextPage) {
-    const data = await graphqlRequest(shop, accessToken, query, {
-      first: 50,
-      after: cursor,
-    });
+  try {
+    while (hasNextPage && allProducts.length < 250) {
+      const data = await graphqlRequest(shop, accessToken, query, {
+        first: 50,
+        after: cursor,
+      });
 
-    const edges = data.products.edges;
-    allProducts.push(...edges.map((e: any) => e.node));
+      const edges = data.products.edges;
+      allProducts.push(...edges.map((e: any) => e.node));
 
-    hasNextPage = data.products.pageInfo.hasNextPage;
-    cursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
+      hasNextPage = data.products.pageInfo.hasNextPage;
+      cursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
+      
+      if (edges.length === 0) break;
+    }
+
+    console.log(`[GraphQL] ✅ Fetched ${allProducts.length} products from ${shop}`);
+    if (allProducts.length > 0) {
+      console.log(`[GraphQL] Sample product:`, JSON.stringify(allProducts[0], null, 2));
+    } else {
+      console.log(`[GraphQL] ⚠️ No products found - may need to check Shopify admin`);
+    }
+  } catch (error) {
+    console.error(`[GraphQL] ❌ Error fetching products:`, error);
+    throw error;
   }
 
-  console.log(`[GraphQL] Fetched ${allProducts.length} products from ${shop}`);
   return allProducts;
 }
 
@@ -188,20 +201,33 @@ export async function fetchOrdersGraphQL(
   let hasNextPage = true;
   let cursor: string | null = null;
 
-  while (hasNextPage) {
-    const data = await graphqlRequest(shop, accessToken, query, {
-      first: 50,
-      after: cursor,
-    });
+  try {
+    while (hasNextPage && allOrders.length < 250) {
+      const data = await graphqlRequest(shop, accessToken, query, {
+        first: 50,
+        after: cursor,
+      });
 
-    const edges = data.orders.edges;
-    allOrders.push(...edges.map((e: any) => e.node));
+      const edges = data.orders.edges;
+      allOrders.push(...edges.map((e: any) => e.node));
 
-    hasNextPage = data.orders.pageInfo.hasNextPage;
-    cursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
+      hasNextPage = data.orders.pageInfo.hasNextPage;
+      cursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
+      
+      if (edges.length === 0) break;
+    }
+
+    console.log(`[GraphQL] ✅ Fetched ${allOrders.length} orders from ${shop}`);
+    if (allOrders.length > 0) {
+      console.log(`[GraphQL] Sample order:`, JSON.stringify(allOrders[0], null, 2));
+    } else {
+      console.log(`[GraphQL] ⚠️ No orders found`);
+    }
+  } catch (error) {
+    console.error(`[GraphQL] ❌ Error fetching orders:`, error);
+    throw error;
   }
 
-  console.log(`[GraphQL] Fetched ${allOrders.length} orders from ${shop}`);
   return allOrders;
 }
 
