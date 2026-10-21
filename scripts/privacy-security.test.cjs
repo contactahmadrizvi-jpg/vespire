@@ -5,6 +5,26 @@ const vm = require('node:vm');
 const { createHmac } = require('node:crypto');
 const ts = require('typescript');
 
+test('Firebase auth loads and verifies JWKS keys without require(ESM) support', () => {
+  const { spawnSync } = require('node:child_process');
+  const script = `
+    const assert = require('node:assert/strict');
+    const { generateKeyPairSync } = require('node:crypto');
+    const { getAuth } = require('firebase-admin/auth');
+    assert.equal(typeof getAuth, 'function');
+    const jwks = require('jwks-rsa');
+    const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'test-key', alg: 'RS256', use: 'sig' };
+    const client = jwks({ jwksUri: 'https://unused.example/jwks', cache: false, rateLimit: false });
+    client.getKeys = async () => [jwk];
+    client.getSigningKey('test-key').then(key => {
+      assert.equal(key.getPublicKey(), publicKey.export({ format: 'pem', type: 'spki' }));
+    }).catch(error => { console.error(error); process.exitCode = 1; });
+  `;
+  const result = spawnSync(process.execPath, ['--no-experimental-require-module', '-e', script], { encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
 function load(file, dependencies = {}, extra = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
