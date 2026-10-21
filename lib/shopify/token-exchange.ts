@@ -50,9 +50,6 @@ export async function exchangeCodeForToken(
       client_id: SHOPIFY_API_KEY(),
       client_secret: SHOPIFY_API_SECRET(),
       code,
-      redirect_uri: SHOPIFY_REDIRECT_URI(),
-      // Request expiring offline tokens (required for API 2025-01+)
-      grant_options: ["offline", "value"],
     }),
     // Abort if Shopify doesn't respond in 15 s
     signal: AbortSignal.timeout(15_000),

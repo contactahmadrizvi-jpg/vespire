@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redirect } from "next/navigation";
 import { getAdminDb } from "@/lib/firebase/admin";
 
 /**
@@ -22,14 +21,15 @@ export async function POST(request: NextRequest) {
     const db = getAdminDb();
     await db.collection("shopify_installs").doc(shop).delete();
 
-    console.log(`[Shopify] Disconnected store: ${shop}`);
+    console.log(`[Shopify] ✅ Disconnected store: ${shop}`);
 
     // Redirect to install page
-    return NextResponse.redirect(new URL("/install", request.url));
+    const installUrl = new URL("/install", request.url);
+    return NextResponse.redirect(installUrl, 303);
   } catch (error) {
-    console.error("[API] Failed to disconnect store:", error);
+    console.error("[API] ❌ Failed to disconnect store:", error);
     return NextResponse.json(
-      { error: "Failed to disconnect store" },
+      { error: "Failed to disconnect store", details: (error as Error).message },
       { status: 500 }
     );
   }

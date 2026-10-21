@@ -71,6 +71,8 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set("scope", SHOPIFY_SCOPES());
   authUrl.searchParams.set("redirect_uri", SHOPIFY_REDIRECT_URI());
   authUrl.searchParams.set("state", state);
+  // Request expiring offline tokens (required for API 2025-01+)
+  authUrl.searchParams.set("grant_options[]", "value");
 
   // Debug log - check Vercel function logs to see actual values
   console.log('[OAuth] Redirect URI:', SHOPIFY_REDIRECT_URI());
