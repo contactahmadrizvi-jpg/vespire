@@ -82,7 +82,7 @@ export default async function StoreDetailPage({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
             href="/shopify/stores"
@@ -99,8 +99,18 @@ export default async function StoreDetailPage({
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{shop}</p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <RefreshButton shop={shop} />
+          <form action="/api/auth" method="POST">
+            <input type="hidden" name="shop" value={shop} />
+            <input type="hidden" name="privacy" value={storeData?.privacyVersion ?? ""} />
+            <button
+              type="submit"
+              className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
+            >
+              Update permissions
+            </button>
+          </form>
           <form action="/api/shopify/disconnect" method="POST">
             <input type="hidden" name="shop" value={shop} />
             <button
@@ -118,7 +128,7 @@ export default async function StoreDetailPage({
         {Object.entries(storeData?.syncErrors ?? {}).map(([resource, message]) => (
           <p key={resource} className="text-red-600">{resource}: {String(message)}</p>
         ))}
-        <Link href={'/connect?shop=' + encodeURIComponent(shop)} className="inline-block underline">Reconnect store permissions</Link>
+        <p className="text-zinc-500">Use Update permissions to approve customer access in Shopify. Your store stays connected and saved data is kept.</p>
         <p className="text-zinc-500">Orders and abandoned checkouts are limited to the last 30 days for privacy.</p>
       </div>
 
@@ -268,7 +278,7 @@ export default async function StoreDetailPage({
                       <p>{checkout.email || "Email not provided"}</p>
                       <p>{checkout.phone || "Phone not provided"}</p>
                       <p>SMS marketing consent: {checkout.sms_marketing_state || "UNKNOWN"}</p>
-                      {checkout.customer_details_available === false && <p className="text-amber-700">Checkout loaded. Reconnect with customer permissions to load contact details.</p>}
+                      {checkout.customer_details_available === false && <p className="text-amber-700">Checkout loaded. Use Update permissions above to grant access to customer details.</p>}
                     </div>
                     <div className="mt-2 space-y-1">
                       {(checkout.line_items ?? []).map((item, idx) => (
