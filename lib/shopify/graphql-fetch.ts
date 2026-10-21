@@ -232,6 +232,7 @@ export interface AbandonedCheckout {
   phone: string | null;
   sms_marketing_state: string;
   sms_consent_updated_at: string | null;
+  customer_details_available: boolean;
   created_at: string;
   total_price: string;
   currency: string;
@@ -259,14 +260,14 @@ interface CheckoutNode {
 /** Shopify exposes abandoned checkouts after the buyer provides contact details. */
 export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: string): Promise<AbandonedCheckout[]> {
   const query = `
-    query GetAbandonedCheckouts($first: Int!, $after: String) {
+    query GetAbandonedCheckouts($first: Int!, $after: String, $includeCustomer: Boolean!) {
       abandonedCheckouts(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
         nodes {
           id
           name
           createdAt
           completedAt
-          customer {
+          customer @include(if: $includeCustomer) {
             firstName
             lastName
             defaultEmailAddress { emailAddress }
@@ -284,8 +285,21 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
   `;
   const checkouts: AbandonedCheckout[] = [];
   let after: string | null = null;
+  let includeCustomer = true;
   while (true) {
-    const data = await graphqlRequest(shop, accessToken, query, { first: 25, after });
+    let data;
+    try {
+      data = await graphqlRequest(shop, accessToken, query, { first: 25, after, includeCustomer });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Customer permission must not prevent loading otherwise accessible checkouts.
+      if (includeCustomer && message.includes("ACCESS_DENIED") &&
+          (message.includes("read_customers") || message.includes('"customer"') || message.includes("Customer object"))) {
+        includeCustomer = false;
+        continue;
+      }
+      throw error;
+    }
     const connection = data.abandonedCheckouts as {
       nodes: CheckoutNode[];
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -295,6 +309,7 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
       checkouts.push({
         id: checkout.id,
         name: checkout.name,
+        customer_details_available: includeCustomer,
         customer_name: [checkout.customer?.firstName, checkout.customer?.lastName].filter(Boolean).join(" ") || null,
         email: checkout.customer?.defaultEmailAddress?.emailAddress ?? null,
         phone: checkout.customer?.defaultPhoneNumber?.phoneNumber ?? null,
