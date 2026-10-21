@@ -41,13 +41,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch fresh data from Shopify
+    console.log(`[Shopify Refresh] Starting fetch for: ${shop}`);
     const data = await fetchAllShopData(shop, accessToken);
     console.log(
-      `[Shopify Refresh] Fetched data for: ${shop} - ` +
+      `[Shopify Refresh] ✅ Fetched data for: ${shop} - ` +
       `Products: ${data.products.length}, Orders: ${data.orders.length}, Carts: ${data.abandonedCheckouts.length}`
     );
 
     // Update Firestore
+    console.log(`[Shopify Refresh] Updating Firestore for: ${shop}`);
     await db.collection("shopify_installs").doc(shop).update({
       products: data.products,
       orders: data.orders,
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
       lastDataFetch: new Date().toISOString(),
     });
 
-    console.log(`[Shopify Refresh] Data saved for: ${shop}`);
+    console.log(`[Shopify Refresh] ✅ Data saved for: ${shop}`);
 
     return NextResponse.json({
       success: true,

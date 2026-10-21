@@ -104,26 +104,33 @@ export async function GET(request: NextRequest) {
   let abandonedCheckouts: any[] = [];
 
   try {
+    console.log(`[Shopify OAuth] Starting data fetch for: ${shop}`);
     const data = await fetchAllShopData(shop, accessToken);
     products = data.products;
     orders = data.orders;
     abandonedCheckouts = data.abandonedCheckouts;
     console.log(
-      `[Shopify OAuth] Shop data fetched for: ${shop} - ` +
+      `[Shopify OAuth] ✅ Shop data fetched for: ${shop} - ` +
       `Products: ${products.length}, Orders: ${orders.length}, Carts: ${abandonedCheckouts.length}`
     );
+    
+    // Log sample data
+    if (products.length > 0) {
+      console.log(`[Shopify OAuth] Sample product:`, JSON.stringify(products[0], null, 2));
+    }
   } catch (err) {
-    console.error(`[Shopify OAuth] Failed to fetch data for ${shop}:`, err);
+    console.error(`[Shopify OAuth] ❌ Failed to fetch data for ${shop}:`, err);
     // Continue with empty arrays - don't fail the install
   }
 
   // ── 7. Save EVERYTHING to Firestore in ONE WRITE ────────────────────
   try {
+    console.log(`[Shopify OAuth] Saving to Firestore for: ${shop}...`);
     const { FieldValue } = await import("firebase-admin/firestore");
     const { getAdminDb } = await import("@/lib/firebase/admin");
     const db = getAdminDb();
     
-    await db.collection("shopify_installs").doc(shop).set({
+    const docData = {
       shop,
       accessToken,
       scope,
@@ -133,11 +140,21 @@ export async function GET(request: NextRequest) {
       installedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       lastDataFetch: new Date().toISOString(),
+    };
+    
+    console.log(`[Shopify OAuth] Document data summary:`, {
+      shop,
+      scope,
+      productsCount: products.length,
+      ordersCount: orders.length,
+      cartsCount: abandonedCheckouts.length,
     });
     
-    console.log(`[Shopify OAuth] All data saved to Firestore for: ${shop}`);
+    await db.collection("shopify_installs").doc(shop).set(docData);
+    
+    console.log(`[Shopify OAuth] ✅ All data saved to Firestore for: ${shop}`);
   } catch (err) {
-    console.error("[Shopify OAuth] Firestore save error:", err);
+    console.error("[Shopify OAuth] ❌ Firestore save error:", err);
     return errorResponse(
       `Failed to save shop data: ${(err as Error).message}`,
       500,
