@@ -232,6 +232,47 @@ export async function fetchOrdersGraphQL(
 }
 
 /**
+ * Transform GraphQL product data to match UI expectations (snake_case)
+ */
+function transformProduct(product: any): any {
+  return {
+    id: product.id,
+    title: product.title,
+    vendor: product.vendor,
+    product_type: product.productType, // camelCase → snake_case
+    status: product.status,
+    variants: product.variants.edges.map((e: any) => ({
+      id: e.node.id,
+      title: e.node.title,
+      price: e.node.price,
+      inventory_quantity: e.node.inventoryQuantity, // camelCase → snake_case
+    })),
+    image: product.featuredImage ? {
+      src: product.featuredImage.url,
+    } : undefined,
+  };
+}
+
+/**
+ * Transform GraphQL order data to match UI expectations (snake_case)
+ */
+function transformOrder(order: any): any {
+  return {
+    id: order.id,
+    name: order.name,
+    email: order.email,
+    total_price: order.totalPriceSet.shopMoney.amount, // nested → flat
+    financial_status: order.displayFinancialStatus, // camelCase → snake_case
+    fulfillment_status: order.displayFulfillmentStatus === 'UNFULFILLED' ? null : order.displayFulfillmentStatus, // camelCase → snake_case
+    created_at: order.createdAt, // camelCase → snake_case
+    line_items: order.lineItems.edges.map((e: any) => ({
+      title: e.node.title,
+      quantity: e.node.quantity,
+    })),
+  };
+}
+
+/**
  * Fetch all data using GraphQL (products + orders)
  */
 export async function fetchAllShopDataGraphQL(
@@ -243,7 +284,7 @@ export async function fetchAllShopDataGraphQL(
 }> {
   console.log(`[GraphQL] Starting data fetch for: ${shop}`);
 
-  const [products, orders] = await Promise.all([
+  const [rawProducts, rawOrders] = await Promise.all([
     fetchProductsGraphQL(shop, accessToken).catch((err) => {
       console.error("[GraphQL] Products fetch error:", err);
       return [];
@@ -254,9 +295,21 @@ export async function fetchAllShopDataGraphQL(
     }),
   ]);
 
+  // Transform GraphQL camelCase to UI snake_case format
+  const products = rawProducts.map(transformProduct);
+  const orders = rawOrders.map(transformOrder);
+
   console.log(
     `[GraphQL] ✅ Fetch complete - Products: ${products.length}, Orders: ${orders.length}`
   );
+  
+  // Log transformed sample for debugging
+  if (products.length > 0) {
+    console.log(`[GraphQL] Transformed product sample:`, JSON.stringify(products[0], null, 2));
+  }
+  if (orders.length > 0) {
+    console.log(`[GraphQL] Transformed order sample:`, JSON.stringify(orders[0], null, 2));
+  }
 
   return { products, orders };
 }
