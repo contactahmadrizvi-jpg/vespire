@@ -100,6 +100,15 @@ export default async function StoreDetailPage({
         </div>
       </div>
 
+      <div className="space-y-2 text-sm" role="status">
+        <p className="text-zinc-500">{storeData?.lastDataFetch ? 'Last synced: ' + new Date(storeData.lastDataFetch).toLocaleString() : 'Click Refresh Data to load products and recent orders.'}</p>
+        {Object.entries(storeData?.syncErrors ?? {}).map(([resource, message]) => (
+          <p key={resource} className="text-red-600">{resource}: {String(message)}</p>
+        ))}
+        <Link href={'/api/auth?shop=' + encodeURIComponent(shop)} className="inline-block underline">Reconnect store permissions</Link>
+        <p className="text-zinc-500">Shopify normally provides orders from the last 60 days. Older orders require additional access.</p>
+      </div>
+
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
@@ -191,7 +200,7 @@ export default async function StoreDetailPage({
                     </div>
                     <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{order.email}</p>
                     <div className="mt-2 space-y-1">
-                      {order.line_items.map((item, idx) => (
+                      {(order.line_items ?? []).map((item, idx) => (
                         <p key={idx} className="text-xs text-zinc-600 dark:text-zinc-400">
                           {item.quantity}x {item.title}
                         </p>

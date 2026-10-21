@@ -1,9 +1,6 @@
-/**
- * Shopify GraphQL Admin API client
- * 
- * Using GraphQL instead of REST to avoid token expiration issues
- * GraphQL API is more modern and doesn't have the non-expiring token problem
- */
+/** Shopify Admin GraphQL fetching and UI data mapping. */
+
+import { SHOPIFY_API_VERSION } from "./config";
 
 export interface ShopifyProduct {
   id: string;
@@ -57,7 +54,7 @@ async function graphqlRequest(
   query: string,
   variables?: Record<string, any>
 ): Promise<any> {
-  const url = `https://${shop}/admin/api/2026-10/graphql.json`;
+  const url = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   
   const response = await fetch(url, {
     method: "POST",
@@ -66,16 +63,20 @@ async function graphqlRequest(
       "X-Shopify-Access-Token": accessToken,
     },
     body: JSON.stringify({ query, variables }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`GraphQL request failed [${response.status}]: ${text}`);
+    throw new Error(response.status === 401
+      ? "Shopify connection has expired or been revoked. Reconnect your store."
+      : `Shopify request failed [${response.status}]: ${text}`);
   }
 
   const json = await response.json();
   
-  if (json.errors) {
+  if (json.errors?.length) {
     throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
   }
 
@@ -91,7 +92,7 @@ export async function fetchProductsGraphQL(
 ): Promise<any[]> {
   const query = `
     query GetProducts($first: Int!, $after: String) {
-      products(first: $first, after: $after, query: "status:active OR status:draft") {
+      products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
         edges {
           node {
             id
@@ -127,7 +128,7 @@ export async function fetchProductsGraphQL(
   let cursor: string | null = null;
 
   try {
-    while (hasNextPage && allProducts.length < 250) {
+    while (hasNextPage) {
       const data = await graphqlRequest(shop, accessToken, query, {
         first: 50,
         after: cursor,
@@ -143,11 +144,6 @@ export async function fetchProductsGraphQL(
     }
 
     console.log(`[GraphQL] ✅ Fetched ${allProducts.length} products from ${shop}`);
-    if (allProducts.length > 0) {
-      console.log(`[GraphQL] Sample product:`, JSON.stringify(allProducts[0], null, 2));
-    } else {
-      console.log(`[GraphQL] ⚠️ No products found - may need to check Shopify admin`);
-    }
   } catch (error) {
     console.error(`[GraphQL] ❌ Error fetching products:`, error);
     throw error;
@@ -165,12 +161,11 @@ export async function fetchOrdersGraphQL(
 ): Promise<any[]> {
   const query = `
     query GetOrders($first: Int!, $after: String) {
-      orders(first: $first, after: $after) {
+      orders(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
         edges {
           node {
             id
             name
-            email
             totalPriceSet {
               shopMoney {
                 amount
@@ -202,7 +197,7 @@ export async function fetchOrdersGraphQL(
   let cursor: string | null = null;
 
   try {
-    while (hasNextPage && allOrders.length < 250) {
+    while (hasNextPage) {
       const data = await graphqlRequest(shop, accessToken, query, {
         first: 50,
         after: cursor,
@@ -218,11 +213,6 @@ export async function fetchOrdersGraphQL(
     }
 
     console.log(`[GraphQL] ✅ Fetched ${allOrders.length} orders from ${shop}`);
-    if (allOrders.length > 0) {
-      console.log(`[GraphQL] Sample order:`, JSON.stringify(allOrders[0], null, 2));
-    } else {
-      console.log(`[GraphQL] ⚠️ No orders found`);
-    }
   } catch (error) {
     console.error(`[GraphQL] ❌ Error fetching orders:`, error);
     throw error;
@@ -249,7 +239,7 @@ function transformProduct(product: any): any {
     })),
     image: product.featuredImage ? {
       src: product.featuredImage.url,
-    } : undefined,
+    } : null,
   };
 }
 
@@ -260,7 +250,7 @@ function transformOrder(order: any): any {
   return {
     id: order.id,
     name: order.name,
-    email: order.email,
+    email: "",
     total_price: order.totalPriceSet.shopMoney.amount, // nested → flat
     financial_status: order.displayFinancialStatus, // camelCase → snake_case
     fulfillment_status: order.displayFulfillmentStatus === 'UNFULFILLED' ? null : order.displayFulfillmentStatus, // camelCase → snake_case
@@ -281,35 +271,19 @@ export async function fetchAllShopDataGraphQL(
 ): Promise<{
   products: any[];
   orders: any[];
+  errors: Partial<Record<"products" | "orders", string>>;
 }> {
-  console.log(`[GraphQL] Starting data fetch for: ${shop}`);
-
-  const [rawProducts, rawOrders] = await Promise.all([
-    fetchProductsGraphQL(shop, accessToken).catch((err) => {
-      console.error("[GraphQL] Products fetch error:", err);
-      return [];
-    }),
-    fetchOrdersGraphQL(shop, accessToken).catch((err) => {
-      console.error("[GraphQL] Orders fetch error:", err);
-      return [];
-    }),
+  const results = await Promise.allSettled([
+    fetchProductsGraphQL(shop, accessToken),
+    fetchOrdersGraphQL(shop, accessToken),
   ]);
-
-  // Transform GraphQL camelCase to UI snake_case format
-  const products = rawProducts.map(transformProduct);
-  const orders = rawOrders.map(transformOrder);
-
-  console.log(
-    `[GraphQL] ✅ Fetch complete - Products: ${products.length}, Orders: ${orders.length}`
-  );
-  
-  // Log transformed sample for debugging
-  if (products.length > 0) {
-    console.log(`[GraphQL] Transformed product sample:`, JSON.stringify(products[0], null, 2));
-  }
-  if (orders.length > 0) {
-    console.log(`[GraphQL] Transformed order sample:`, JSON.stringify(orders[0], null, 2));
-  }
-
-  return { products, orders };
+  const errors: Partial<Record<"products" | "orders", string>> = {};
+  const [productResult, orderResult] = results;
+  if (productResult.status === "rejected") errors.products = String(productResult.reason?.message || productResult.reason);
+  if (orderResult.status === "rejected") errors.orders = String(orderResult.reason?.message || orderResult.reason);
+  return {
+    products: productResult.status === "fulfilled" ? productResult.value.map(transformProduct) : [],
+    orders: orderResult.status === "fulfilled" ? orderResult.value.map(transformOrder) : [],
+    errors,
+  };
 }

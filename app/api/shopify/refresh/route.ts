@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { fetchAllShopDataGraphQL } from "@/lib/shopify/graphql-fetch";
+import { normaliseShop } from "@/lib/shopify/config";
+import { getShopAccessToken } from "@/lib/shopify/access-token";
 
 /**
  * POST /api/shopify/refresh
@@ -10,7 +12,12 @@ import { fetchAllShopDataGraphQL } from "@/lib/shopify/graphql-fetch";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { shop } = body;
+    let shop: string;
+    try {
+      shop = normaliseShop(typeof body.shop === "string" ? body.shop : "");
+    } catch {
+      return NextResponse.json({ error: "Enter a valid Shopify store domain." }, { status: 400 });
+    }
 
     if (!shop) {
       return NextResponse.json(
@@ -30,7 +37,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { accessToken } = doc.data() as { accessToken: string };
+    const accessToken = await getShopAccessToken(shop);
 
     if (!accessToken) {
       return NextResponse.json(
@@ -49,11 +56,15 @@ export async function POST(request: NextRequest) {
 
     // Update Firestore
     console.log(`[Shopify Refresh] Updating Firestore for: ${shop}`);
-    await db.collection("shopify_installs").doc(shop).update({
-      products: data.products,
-      orders: data.orders,
-      lastDataFetch: new Date().toISOString(),
-    });
+    const updates: Record<string, unknown> = { syncErrors: data.errors };
+    if (!data.errors.products) updates.products = data.products;
+    if (!data.errors.orders) updates.orders = data.orders;
+    if (Object.keys(data.errors).length === 0) updates.lastDataFetch = new Date().toISOString();
+    await db.collection("shopify_installs").doc(shop).update(updates);
+
+    if (Object.keys(data.errors).length) {
+      return NextResponse.json({ error: Object.entries(data.errors).map(([resource, message]) => `${resource}: ${message}`).join(" "), partial: true }, { status: 502 });
+    }
 
     console.log(`[Shopify Refresh] ✅ Data saved for: ${shop}`);
 

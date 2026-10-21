@@ -19,6 +19,8 @@ import {
 export interface ShopifyAccessTokenResponse {
   access_token: string;
   scope: string;
+  refresh_token?: string;
+  refresh_token_expires_in?: number;
   expires_in?: number; // Seconds until token expires (for expiring tokens)
   associated_user_scope?: string;
   associated_user?: {
@@ -41,10 +43,9 @@ export interface ShopCredential {
 
 /**
  * POST to Shopify's token endpoint and exchange `code` for an access token.
- * 
- * NOTE: As of API version 2025-01, Shopify requires expiring offline tokens.
- * We request them explicitly via grant_options.
- * 
+ *
+ * Request expiring offline credentials using expiring=1.
+ *
  * Throws on any network or API error so the caller can return a proper 500.
  */
 export async function exchangeCodeForToken(
@@ -57,9 +58,9 @@ export async function exchangeCodeForToken(
     client_id: SHOPIFY_API_KEY(),
     client_secret: SHOPIFY_API_SECRET(),
     code,
-    // Request expiring offline tokens (required as of API version 2025-01)
+    // Request an expiring offline token and a refresh token.
     // See: https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens
-    grant_options: ["offline"],
+    expiring: 1,
   };
 
   console.log(`[Token Exchange] 🔄 Requesting token from Shopify...`);
@@ -67,7 +68,7 @@ export async function exchangeCodeForToken(
     client_id: requestBody.client_id ? 'present' : 'MISSING',
     client_secret: requestBody.client_secret ? 'present' : 'MISSING',
     code: code ? `${code.substring(0, 15)}...` : 'MISSING',
-    grant_options: requestBody.grant_options,
+    expiring: requestBody.expiring,
   });
 
   const response = await fetch(url, {
@@ -106,9 +107,7 @@ export async function exchangeCodeForToken(
     );
   }
 
-  if (!data.expires_in) {
-    console.warn(`[Token Exchange] ⚠️ WARNING: No expires_in in response! Shopify returned non-expiring token despite grant_options!`);
-  }
+
 
   return data;
 }
@@ -127,6 +126,8 @@ export async function saveShopToken(
   accessToken: string,
   scope: string,
   expiresIn?: number,
+  refreshToken?: string,
+  refreshTokenExpiresIn?: number,
 ): Promise<void> {
   const { FieldValue } = await import("firebase-admin/firestore");
 
@@ -147,8 +148,11 @@ export async function saveShopToken(
   } else {
     // Non-expiring token (shouldn't happen with new API versions)
     data.expiresAt = null;
-    console.log(`[Token] Warning: Received non-expiring token`);
+
   }
+
+  if (refreshToken) data.refreshToken = refreshToken;
+  if (refreshTokenExpiresIn) data.refreshTokenExpiresAt = new Date(Date.now() + refreshTokenExpiresIn * 1000).toISOString();
 
   await getAdminDb()
     .collection("shopify_installs")

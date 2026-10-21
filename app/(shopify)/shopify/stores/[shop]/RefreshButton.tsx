@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 export default function RefreshButton({ shop }: { shop: string }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [message, setMessage] = useState("");
 
   async function handleRefresh() {
     setLoading(true);
+    setMessage("");
     try {
       const res = await fetch("/api/shopify/refresh", {
         method: "POST",
@@ -20,16 +22,18 @@ export default function RefreshButton({ shop }: { shop: string }) {
         router.refresh(); // Reload server component data
       } else {
         const error = await res.json();
-        alert(`Failed to refresh: ${error.error}`);
+        setMessage(error.error || "Could not refresh. Please try again.");
+        router.refresh();
       }
-    } catch (err) {
-      alert("Failed to refresh data");
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
+    <div className="max-w-md">
     <button
       onClick={handleRefresh}
       disabled={loading}
@@ -64,5 +68,7 @@ export default function RefreshButton({ shop }: { shop: string }) {
         </span>
       )}
     </button>
+    {message && <p role="alert" className="mt-2 text-sm text-red-600">{message}</p>}
+    </div>
   );
 }

@@ -25,7 +25,7 @@ import {
   exchangeCodeForToken,
   saveShopToken,
 } from "@/lib/shopify/token-exchange";
-import { 
+import {
   fetchAllShopDataGraphQL
 } from "@/lib/shopify/graphql-fetch";
 
@@ -84,31 +84,32 @@ export async function GET(request: NextRequest) {
   let accessToken: string;
   let scope: string;
   let expiresIn: number | undefined;
+  let refreshToken: string | undefined;
+  let refreshTokenExpiresIn: number | undefined;
   try {
     console.log(`[Shopify OAuth] 🔄 Starting token exchange for: ${shop}`);
-    console.log(`[Shopify OAuth] 📝 Code received: ${code.substring(0, 20)}...`);
-    
+
     const tokenResponse = await exchangeCodeForToken(shop, code);
-    
+
     console.log(`[Shopify OAuth] 📦 Token response received:`, {
       hasAccessToken: !!tokenResponse.access_token,
       scope: tokenResponse.scope,
       expiresIn: tokenResponse.expires_in,
-      tokenPrefix: tokenResponse.access_token?.substring(0, 10),
+
     });
-    
+
     accessToken = tokenResponse.access_token;
     scope       = tokenResponse.scope;
     expiresIn   = tokenResponse.expires_in;
-    
+    refreshToken = tokenResponse.refresh_token;
+    refreshTokenExpiresIn = tokenResponse.refresh_token_expires_in;
+
     console.log(
       `[Shopify OAuth] ✅ Token exchange successful for shop: ${shop}. ` +
-      `Scopes: ${scope}, Expires in: ${expiresIn ? `${expiresIn}s (${Math.round(expiresIn / 86400)} days)` : 'NEVER - THIS IS BAD!'}`,
+      `Scopes: ${scope}, Expires in: ${expiresIn ? `${expiresIn}s (${Math.round(expiresIn / 86400)} days)` : 'offline access'}`,
     );
-    
-    if (!expiresIn) {
-      console.warn(`[Shopify OAuth] ⚠️ WARNING: Received non-expiring token! grant_options may not be working!`);
-    }
+
+
   } catch (err) {
     console.error("[Shopify OAuth] ❌ Token exchange error:", err);
     console.error("[Shopify OAuth] ❌ Error details:", {
@@ -121,72 +122,19 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 6. Fetch products, orders using GraphQL (avoids token issues) ────
-  let products: any[] = [];
-  let orders: any[] = [];
-
+  // Save credentials before syncing: a data error must not lose the installation.
   try {
-    console.log(`[Shopify OAuth] Starting GraphQL data fetch for: ${shop}`);
-    const data = await fetchAllShopDataGraphQL(shop, accessToken);
-    products = data.products;
-    orders = data.orders;
-    console.log(
-      `[Shopify OAuth] ✅ GraphQL data fetched for: ${shop} - ` +
-      `Products: ${products.length}, Orders: ${orders.length}`
-    );
-    
-    // Log sample data
-    if (products.length > 0) {
-      console.log(`[Shopify OAuth] Sample product:`, JSON.stringify(products[0], null, 2));
-    }
-  } catch (err) {
-    console.error(`[Shopify OAuth] ❌ Failed to fetch data for ${shop}:`, err);
-    // Continue with empty arrays - don't fail the install
-  }
-
-  // ── 7. Save EVERYTHING to Firestore in ONE WRITE ────────────────────
-  try {
-    console.log(`[Shopify OAuth] Saving to Firestore for: ${shop}...`);
-    const { FieldValue } = await import("firebase-admin/firestore");
+    await saveShopToken(shop, accessToken, scope, expiresIn, refreshToken, refreshTokenExpiresIn);
     const { getAdminDb } = await import("@/lib/firebase/admin");
-    const db = getAdminDb();
-    
-    const docData: any = {
-      shop,
-      accessToken,
-      scope,
-      products,
-      orders,
-      abandoned_checkouts: [], // GraphQL doesn't have abandoned checkouts endpoint
-      installedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-      lastDataFetch: new Date().toISOString(),
-    };
-    
-    // Add expiration time if token expires
-    if (expiresIn) {
-      const expiresAt = new Date(Date.now() + expiresIn * 1000);
-      docData.expiresAt = expiresAt.toISOString();
-      console.log(`[Shopify OAuth] Token expires at: ${expiresAt.toISOString()}`);
-    }
-    
-    console.log(`[Shopify OAuth] Document data summary:`, {
-      shop,
-      scope,
-      productsCount: products.length,
-      ordersCount: orders.length,
-      expiresIn: expiresIn ? `${expiresIn}s` : 'never',
-    });
-    
-    await db.collection("shopify_installs").doc(shop).set(docData);
-    
-    console.log(`[Shopify OAuth] ✅ All data saved to Firestore for: ${shop}`);
+    const data = await fetchAllShopDataGraphQL(shop, accessToken);
+    const updates: Record<string, unknown> = { syncErrors: data.errors };
+    if (!data.errors.products) updates.products = data.products;
+    if (!data.errors.orders) updates.orders = data.orders;
+    if (Object.keys(data.errors).length === 0) updates.lastDataFetch = new Date().toISOString();
+    await getAdminDb().collection("shopify_installs").doc(shop).update(updates);
   } catch (err) {
-    console.error("[Shopify OAuth] ❌ Firestore save error:", err);
-    return errorResponse(
-      `Failed to save shop data: ${(err as Error).message}`,
-      500,
-    );
+    console.error("[Shopify OAuth] Installation sync failed:", err);
+    return errorResponse("Could not save the Shopify connection. Please try connecting again.", 500);
   }
 
   // ── 8. Redirect merchant to success page ────────────────────────────
