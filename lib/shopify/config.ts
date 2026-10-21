@@ -25,7 +25,7 @@ export const APP_URL = () => {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 };
 export const SHOPIFY_SCOPES     = () =>
-  process.env.SHOPIFY_SCOPES ?? "read_products,read_orders";
+  process.env.SHOPIFY_SCOPES ?? "read_products,read_orders,write_orders";
 
 /**
  * The callback URL registered in the Shopify Partners Dashboard.
