@@ -24,8 +24,11 @@ export const APP_URL = () => {
   // Remove trailing slash if present
   return url.endsWith('/') ? url.slice(0, -1) : url;
 };
-export const SHOPIFY_SCOPES     = () =>
-  process.env.SHOPIFY_SCOPES ?? "read_products,read_orders,write_orders";
+export const SHOPIFY_SCOPES = () =>
+  Array.from(new Set([
+    ...(process.env.SHOPIFY_SCOPES ?? "read_products,read_orders,write_orders").split(",").map(scope => scope.trim()).filter(Boolean),
+    "read_customers",
+  ])).join(",");
 
 /**
  * The callback URL registered in the Shopify Partners Dashboard.

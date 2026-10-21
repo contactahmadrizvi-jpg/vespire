@@ -38,7 +38,10 @@ interface Order {
 interface AbandonedCheckout {
   id: string;
   name?: string;
-  email?: string;
+  customer_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  sms_marketing_state?: string;
   currency?: string;
   total_price: string;
   created_at: string;
@@ -251,6 +254,12 @@ export default async function StoreDetailPage({
                       <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-400">
                         Abandoned
                       </span>
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                      <p>{checkout.customer_name || "Name not provided"}</p>
+                      <p>{checkout.email || "Email not provided"}</p>
+                      <p>{checkout.phone || "Phone not provided"}</p>
+                      <p>SMS marketing consent: {checkout.sms_marketing_state || "UNKNOWN"}</p>
                     </div>
                     <div className="mt-2 space-y-1">
                       {(checkout.line_items ?? []).map((item, idx) => (

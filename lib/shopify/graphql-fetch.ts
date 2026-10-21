@@ -227,6 +227,11 @@ export async function fetchOrdersGraphQL(
 export interface AbandonedCheckout {
   id: string;
   name: string;
+  customer_name: string | null;
+  email: string | null;
+  phone: string | null;
+  sms_marketing_state: string;
+  sms_consent_updated_at: string | null;
   created_at: string;
   total_price: string;
   currency: string;
@@ -238,6 +243,15 @@ interface CheckoutNode {
   name: string;
   createdAt: string;
   completedAt: string | null;
+  customer: {
+    firstName: string | null;
+    lastName: string | null;
+    defaultEmailAddress: { emailAddress: string } | null;
+    defaultPhoneNumber: {
+      phoneNumber: string;
+      smsMarketingConsent: { state: string; updatedAt: string | null };
+    } | null;
+  } | null;
   totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
   lineItems: { nodes: Array<{ title: string | null; quantity: number }> };
 }
@@ -252,6 +266,15 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
           name
           createdAt
           completedAt
+          customer {
+            firstName
+            lastName
+            defaultEmailAddress { emailAddress }
+            defaultPhoneNumber {
+              phoneNumber
+              smsMarketingConsent { state updatedAt }
+            }
+          }
           totalPriceSet { shopMoney { amount currencyCode } }
           lineItems(first: 100) { nodes { title quantity } }
         }
@@ -272,6 +295,11 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
       checkouts.push({
         id: checkout.id,
         name: checkout.name,
+        customer_name: [checkout.customer?.firstName, checkout.customer?.lastName].filter(Boolean).join(" ") || null,
+        email: checkout.customer?.defaultEmailAddress?.emailAddress ?? null,
+        phone: checkout.customer?.defaultPhoneNumber?.phoneNumber ?? null,
+        sms_marketing_state: checkout.customer?.defaultPhoneNumber?.smsMarketingConsent?.state ?? "UNKNOWN",
+        sms_consent_updated_at: checkout.customer?.defaultPhoneNumber?.smsMarketingConsent?.updatedAt ?? null,
         created_at: checkout.createdAt,
         total_price: checkout.totalPriceSet.shopMoney.amount,
         currency: checkout.totalPriceSet.shopMoney.currencyCode,
