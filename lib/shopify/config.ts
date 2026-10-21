@@ -19,7 +19,11 @@ function requireEnv(name: string): string {
 
 export const SHOPIFY_API_KEY    = () => requireEnv("SHOPIFY_API_KEY");
 export const SHOPIFY_API_SECRET = () => requireEnv("SHOPIFY_API_SECRET");
-export const APP_URL            = () => requireEnv("APP_URL");
+export const APP_URL = () => {
+  const url = requireEnv("APP_URL");
+  // Remove trailing slash if present
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+};
 export const SHOPIFY_SCOPES     = () =>
   process.env.SHOPIFY_SCOPES ?? "read_products,read_orders";
 

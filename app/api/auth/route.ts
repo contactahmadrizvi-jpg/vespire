@@ -22,6 +22,7 @@ import {
   SHOPIFY_SCOPES,
   SHOPIFY_STATE_COOKIE,
   SHOPIFY_STATE_COOKIE_MAX_AGE,
+  APP_URL,
 } from "@/lib/shopify/config";
 
 export async function GET(request: NextRequest) {
