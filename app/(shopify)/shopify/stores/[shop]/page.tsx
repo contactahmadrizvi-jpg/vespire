@@ -68,20 +68,32 @@ export default async function StoreDetailPage({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <Link
-          href="/shopify/stores"
-          className="inline-flex items-center gap-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to stores
-        </Link>
-        <h1 className="mt-4 text-3xl font-bold text-zinc-900 dark:text-zinc-50">
-          {shop.replace('.myshopify.com', '')}
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{shop}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <Link
+            href="/shopify/stores"
+            className="inline-flex items-center gap-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to stores
+          </Link>
+          <h1 className="mt-4 text-3xl font-bold text-zinc-900 dark:text-zinc-50">
+            {shop.replace('.myshopify.com', '')}
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{shop}</p>
+        </div>
+        
+        <form action="/api/shopify/disconnect" method="POST">
+          <input type="hidden" name="shop" value={shop} />
+          <button
+            type="submit"
+            className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+          >
+            Disconnect Store
+          </button>
+        </form>
       </div>
 
       {/* Stats */}

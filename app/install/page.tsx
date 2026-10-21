@@ -1,11 +1,37 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 export default function InstallPage() {
+  const router = useRouter();
   const [shop, setShop] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [validatedShop, setValidatedShop] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  // Check if user already has connected stores
+  useEffect(() => {
+    async function checkStores() {
+      try {
+        const res = await fetch("/api/shopify/stores");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.stores && data.stores.length > 0) {
+            // Redirect to stores dashboard
+            router.push("/shopify/stores");
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check stores:", err);
+      } finally {
+        setChecking(false);
+      }
+    }
+    
+    checkStores();
+  }, [router]);
 
   function normaliseInput(value: string): string {
     return value
@@ -85,6 +111,18 @@ export default function InstallPage() {
               ← Change store
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading while checking stores
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
+        <div className="text-center">
+          <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900 dark:border-zinc-800 dark:border-t-zinc-100"></div>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Checking stores...</p>
         </div>
       </div>
     );
