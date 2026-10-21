@@ -140,3 +140,32 @@ test('origin verification accepts configured Vercel hosts but rejects forged or 
     assert.throws(() => access.sameOrigin(request(origin)), error => error.status === 403);
   }
 });
+
+test('privacy-suppressed form origin requires a token bound to the same HTTP-only session', async () => {
+  const dependencies = { 'server-only': {}, 'next/headers': { cookies: async () => ({ get: () => ({ value: 'session-a' }) }) }, 'firebase-admin/auth': {}, 'next/navigation': {}, '@/lib/firebase/admin': {}, '@/lib/firebase/constants': { SESSION_COOKIE_NAME: 'session' } };
+  const access = load('lib/security/access.ts', dependencies);
+  const token = await access.formCsrfToken();
+  const request = (session, site = 'same-origin', origin = 'null') => new Request('https://app.test/api/auth', { headers: { origin, 'sec-fetch-site': site, cookie: `session=${session}` } });
+  assert.equal(access.sameOrigin(request('session-a'), token), 'https://app.test');
+  for (const [req, value] of [[request('session-b'), token], [request('session-a'), 'forged'], [request('session-a', 'cross-site'), token], [request('session-a', 'same-origin', 'https://evil.test'), token]]) {
+    assert.throws(() => access.sameOrigin(req, value), error => error.status === 403);
+  }
+});
+
+test('routine ID token refresh preserves the session; a different sign-in replaces it', async () => {
+  let creates = 0; let writes = 0; let uid = 'same-user';
+  const auth = {
+    verifyIdToken: async () => ({ uid, auth_time: 123 }),
+    verifySessionCookie: async () => ({ uid: 'same-user', auth_time: 123, exp: Date.now() / 1000 + 3600 }),
+    createSessionCookie: async () => { creates++; return 'new-session'; },
+  };
+  const actions = load('lib/firebase/auth-actions.ts', {
+    'next/headers': { cookies: async () => ({ get: () => ({ value: 'existing-session' }), set: () => { writes++; } }) },
+    'firebase-admin/auth': { getAuth: () => auth }, './admin': { getAdminApp() {} },
+    './constants': { SESSION_COOKIE_NAME: 'session', SESSION_COOKIE_MAX_AGE: 604800 },
+  });
+  await actions.setSessionCookie('valid-id-token');
+  assert.equal(creates, 0); assert.equal(writes, 0);
+  uid = 'different-user'; await actions.setSessionCookie('another-valid-id-token');
+  assert.equal(creates, 1); assert.equal(writes, 1);
+});

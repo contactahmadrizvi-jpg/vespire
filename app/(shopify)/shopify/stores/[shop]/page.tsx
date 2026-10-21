@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminDb } from "@/lib/firebase/admin";
 import RefreshButton from "./RefreshButton";
-import { pageUser, audit } from "@/lib/security/access";
+import { pageUser, audit, formCsrfToken } from "@/lib/security/access";
 import { pruneStore } from "@/lib/security/retention";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +62,7 @@ export default async function StoreDetailPage({
 }) {
   const { shop } = await params;
   const user = await pageUser();
+  const csrf = await formCsrfToken();
   const db = getAdminDb();
   
   const docRef = db.collection(storeCollection()).doc(shop);
@@ -102,6 +103,7 @@ export default async function StoreDetailPage({
         <div className="flex flex-wrap gap-2">
           <RefreshButton shop={shop} />
           <form action="/api/auth" method="POST">
+            <input type="hidden" name="csrf" value={csrf} />
             <input type="hidden" name="shop" value={shop} />
             <input type="hidden" name="privacy" value={storeData?.privacyVersion ?? ""} />
             <button
@@ -112,6 +114,7 @@ export default async function StoreDetailPage({
             </button>
           </form>
           <form action="/api/shopify/disconnect" method="POST">
+            <input type="hidden" name="csrf" value={csrf} />
             <input type="hidden" name="shop" value={shop} />
             <button
               type="submit"

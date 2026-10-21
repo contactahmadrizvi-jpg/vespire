@@ -24,7 +24,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const origin = sameOrigin(request);
+    const form = await request.formData();
+    const origin = sameOrigin(request, String(form.get("csrf") ?? ""));
     const user = await currentUser();
     const { id } = await params;
     const ref = getAdminDb().collection(`${storeCollection()}_privacy_requests`).doc(id);

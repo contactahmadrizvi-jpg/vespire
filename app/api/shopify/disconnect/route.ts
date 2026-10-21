@@ -11,9 +11,9 @@ import { normaliseShop } from "@/lib/shopify/config";
  */
 export async function POST(request: NextRequest) {
   try {
-    const origin = sameOrigin(request);
-    const user = await currentUser();
     const formData = await request.formData();
+    const origin = sameOrigin(request, String(formData.get("csrf") ?? ""));
+    const user = await currentUser();
     const shop = normaliseShop(String(formData.get("shop") ?? ""));
     await ownedStore(shop, user.uid);
     await audit(user.uid, shop, "store.disconnect_and_delete");

@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getAuth } from "firebase-admin/auth";
 import { redirect } from "next/navigation";
@@ -45,7 +46,16 @@ export async function audit(uid: string, shop: string, action: string) {
   });
 }
 
-export function sameOrigin(request: Request) {
+function csrfForSession(session: string) {
+  return createHash("sha256").update(`vespire-form-csrf-v1:${session}`).digest("hex");
+}
+
+export async function formCsrfToken() {
+  const session = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  return session ? csrfForSession(session) : "";
+}
+
+export function sameOrigin(request: Request, formToken?: string) {
   // Vercel can expose an internal request URL behind its public deployment host.
   // Only trust deployment configuration, never client-supplied forwarded headers.
   const allowed = new Set([new URL(request.url).origin]);
@@ -59,6 +69,24 @@ export function sameOrigin(request: Request) {
     } catch { /* Invalid configuration must not weaken origin verification. */ }
   }
   const origin = request.headers.get("origin");
+  // Privacy-sensitive browsers can suppress Origin even for a legitimate form.
+  // Accept those only with a token derived from the HTTP-only session cookie.
+  if ((!origin || origin === "null") && request.headers.get("sec-fetch-site") === "same-origin" && formToken) {
+    const cookie = request.headers.get("cookie")?.split(";").map(part => part.trim()).find(part => part.startsWith(`${SESSION_COOKIE_NAME}=`));
+    let session = "";
+    try { session = decodeURIComponent(cookie?.slice(SESSION_COOKIE_NAME.length + 1) ?? ""); } catch { /* Reject malformed cookies. */ }
+    const expected = Buffer.from(session ? csrfForSession(session) : "");
+    const received = Buffer.from(formToken);
+    if (session && expected.length === received.length && timingSafeEqual(expected, received)) {
+      for (const configured of [process.env.APP_URL,
+        process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+        process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`]) {
+        if (!configured) continue;
+        try { const url = new URL(configured); if (allowed.has(url.origin)) return url.origin; } catch { /* Use next configured URL. */ }
+      }
+      return new URL(request.url).origin;
+    }
+  }
   if (!origin || !allowed.has(origin)) throw new AccessError(403, "Request origin rejected.");
   return origin;
 }

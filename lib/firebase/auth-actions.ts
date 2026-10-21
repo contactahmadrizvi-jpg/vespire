@@ -19,9 +19,17 @@ import {
 /** Persist the Firebase ID token in an HTTP-only cookie so middleware can guard routes. */
 export async function setSessionCookie(idToken: string): Promise<void> {
   const auth = getAuth(getAdminApp());
-  await auth.verifyIdToken(idToken, true);
-  const session = await auth.createSessionCookie(idToken, { expiresIn: SESSION_COOKIE_MAX_AGE * 1000 });
+  const identity = await auth.verifyIdToken(idToken, true);
   const cookieStore = await cookies();
+  const existing = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (existing) {
+    try {
+      const verified = await auth.verifySessionCookie(existing, true);
+      // Keep rendered form tokens valid across routine SDK token refreshes.
+      if (verified.uid === identity.uid && verified.auth_time === identity.auth_time && verified.exp * 1000 > Date.now() + 60_000) return;
+    } catch { /* Replace invalid or expired sessions after verifying the ID token. */ }
+  }
+  const session = await auth.createSessionCookie(idToken, { expiresIn: SESSION_COOKIE_MAX_AGE * 1000 });
 
   cookieStore.set(SESSION_COOKIE_NAME, session, {
     httpOnly: true,

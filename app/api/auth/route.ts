@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const origin = sameOrigin(request);
     const form = await request.formData();
+    const origin = sameOrigin(request, String(form.get("csrf") ?? ""));
     const url = new URL("/api/auth", origin);
     url.searchParams.set("shop", String(form.get("shop") ?? ""));
     url.searchParams.set("privacy", String(form.get("privacy") ?? ""));
