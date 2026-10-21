@@ -169,3 +169,25 @@ test('routine ID token refresh preserves the session; a different sign-in replac
   uid = 'different-user'; await actions.setSessionCookie('another-valid-id-token');
   assert.equal(creates, 1); assert.equal(writes, 1);
 });
+
+test('protected field redaction preserves accessible checkout contact fields', async () => {
+  let errorCode = 'ACCESS_DENIED'; let requests = 0;
+  const fetcher = load('lib/shopify/graphql-fetch.ts', {
+    './config': { SHOPIFY_API_VERSION: '2026-10' }, '@/lib/security/retention': { recentRecords: rows => rows },
+  }, { AbortSignal, fetch: async () => {
+    requests++;
+    return { ok: true, json: async () => ({
+      errors: [{ extensions: { code: errorCode }, path: ['abandonedCheckouts', 'nodes', 0, 'customer', 'firstName'] }],
+      data: { abandonedCheckouts: { nodes: [{ id: 'checkout', name: '#1', createdAt: new Date().toISOString(), completedAt: null,
+        customer: { id: 'customer', firstName: null, lastName: null, defaultEmailAddress: { emailAddress: 'test@example.com' }, defaultPhoneNumber: { phoneNumber: '+15555550123', smsMarketingConsent: { state: 'SUBSCRIBED', updatedAt: null } } },
+        totalPriceSet: { shopMoney: { amount: '10', currencyCode: 'USD' } }, lineItems: { nodes: [] },
+      }], pageInfo: { hasNextPage: false } } },
+    }) };
+  } });
+  const rows = await fetcher.fetchAbandonedCheckoutsGraphQL('test.myshopify.com', 'token');
+  assert.equal(requests, 1); assert.equal(rows[0].email, 'test@example.com');
+  assert.equal(rows[0].phone, '+15555550123'); assert.equal(rows[0].sms_marketing_state, 'SUBSCRIBED');
+  assert.equal(rows[0].customer_details_available, true); assert.match(rows[0].customer_details_warning, /Protected customer data/);
+  errorCode = 'INTERNAL_SERVER_ERROR';
+  await assert.rejects(fetcher.fetchAbandonedCheckoutsGraphQL('test.myshopify.com', 'token'), /GraphQL errors/);
+});

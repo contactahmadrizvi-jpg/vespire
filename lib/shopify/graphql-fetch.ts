@@ -53,7 +53,8 @@ async function graphqlRequest(
   shop: string,
   accessToken: string,
   query: string,
-  variables?: Record<string, any>
+  variables?: Record<string, any>,
+  allowRedactedCustomerFields = false,
 ): Promise<any> {
   const url = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   
@@ -78,6 +79,13 @@ async function graphqlRequest(
   const json = await response.json();
   
   if (json.errors?.length) {
+    const redactedFields = new Set(["firstName", "lastName", "emailAddress", "phoneNumber"]);
+    if (allowRedactedCustomerFields && json.data?.abandonedCheckouts &&
+        json.errors.every((error: { extensions?: { code?: string }; path?: Array<string | number> }) =>
+          error.extensions?.code === "ACCESS_DENIED" && error.path?.includes("customer") &&
+          redactedFields.has(String(error.path[error.path.length - 1])))) {
+      return { ...json.data, customerFieldWarning: "Customer permission is granted, but Shopify has not enabled one or more protected Name, Email or Phone fields for this app. Enable and save those fields in the app’s Protected customer data access settings for development testing." };
+    }
     throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
   }
 
@@ -236,6 +244,7 @@ export interface AbandonedCheckout {
   sms_marketing_state: string;
   sms_consent_updated_at: string | null;
   customer_details_available: boolean;
+  customer_details_warning: string | null;
   created_at: string;
   total_price: string;
   currency: string;
@@ -295,7 +304,7 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
     let data;
     try {
       data = await graphqlRequest(shop, accessToken, query, { first: 25, after, includeCustomer,
-        since: `created_at:>${new Date(Date.now() - 30 * 86400000).toISOString()}` });
+        since: `created_at:>${new Date(Date.now() - 30 * 86400000).toISOString()}` }, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Customer permission must not prevent loading otherwise accessible checkouts.
@@ -316,6 +325,7 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
         id: checkout.id,
         name: checkout.name,
         customer_details_available: includeCustomer,
+        customer_details_warning: data.customerFieldWarning ?? null,
         customer_name: [checkout.customer?.firstName, checkout.customer?.lastName].filter(Boolean).join(" ") || null,
         customer_id: checkout.customer?.id ?? null,
         email: checkout.customer?.defaultEmailAddress?.emailAddress ?? null,

@@ -46,6 +46,7 @@ interface AbandonedCheckout {
   phone?: string | null;
   sms_marketing_state?: string;
   customer_details_available?: boolean;
+  customer_details_warning?: string | null;
   currency?: string;
   total_price: string;
   created_at: string;
@@ -280,11 +281,12 @@ export default async function StoreDetailPage({
                       </span>
                     </div>
                     <div className="mt-2 space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-                      <p>{checkout.customer_name || "Name not provided"}</p>
-                      <p>{checkout.email || "Email not provided"}</p>
-                      <p>{checkout.phone || "Phone not provided"}</p>
+                      <p>{checkout.customer_name || (checkout.customer_details_warning ? "Name unavailable" : "Name not provided")}</p>
+                      <p>{checkout.email || (checkout.customer_details_warning ? "Email unavailable" : "Email not provided")}</p>
+                      <p>{checkout.phone || (checkout.customer_details_warning ? "Phone unavailable" : "Phone not provided")}</p>
                       <p>SMS marketing consent: {checkout.sms_marketing_state || "UNKNOWN"}</p>
                       {checkout.customer_details_available === false && <p className="text-amber-700">Checkout loaded. Use Update permissions above to grant access to customer details.</p>}
+                      {checkout.customer_details_warning && <p className="text-amber-700">{checkout.customer_details_warning}</p>}
                     </div>
                     <div className="mt-2 space-y-1">
                       {(checkout.line_items ?? []).map((item, idx) => (
