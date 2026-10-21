@@ -127,6 +127,9 @@ export default async function StoreDetailPage({
       </div>
 
       <div className="space-y-2 text-sm" role="status">
+        {!String(storeData?.scope ?? "").split(",").map(value => value.trim()).includes("read_customers") && (
+          <p role="alert" className="rounded-lg bg-amber-50 p-3 text-amber-900">Customer access is missing from this connection. Add read_customers to the Shopify app’s API scopes, release the configuration, then click Update permissions. Reconnecting alone cannot grant a scope that the Shopify app has not enabled.</p>
+        )}
         <p className="text-zinc-500">{storeData?.lastDataFetch ? 'Last synced: ' + new Date(storeData.lastDataFetch).toLocaleString() : 'Click Refresh Data to load products and recent orders.'}</p>
         {Object.entries(storeData?.syncErrors ?? {}).map(([resource, message]) => (
           <p key={resource} className="text-red-600">{resource}: {String(message)}</p>

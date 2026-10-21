@@ -143,6 +143,9 @@ export async function GET(request: NextRequest) {
   // ── 8. Redirect merchant to success page ────────────────────────────
   const successUrl = new URL("/install/success", request.nextUrl.origin);
   successUrl.searchParams.set("shop", shop);
+  if (!scope.split(",").map(value => value.trim()).includes("read_customers")) {
+    successUrl.searchParams.set("customer_access", "missing");
+  }
   return NextResponse.redirect(successUrl.toString());
 }
 

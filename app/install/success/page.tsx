@@ -7,6 +7,7 @@ import { Suspense } from "react";
 function SuccessContent() {
   const searchParams = useSearchParams();
   const shop = searchParams.get("shop") || "your store";
+  const missingCustomerAccess = searchParams.get("customer_access") === "missing";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
@@ -37,8 +38,11 @@ function SuccessContent() {
         </p>
 
         <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
-          We're fetching your products, orders, and abandoned carts now...
+          Your initial data sync has finished. Open the dashboard to see records and any access errors.
         </p>
+        {missingCustomerAccess && <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          Shopify connected the store without customer access. Enable read_customers in the Shopify app’s API scopes, release that configuration, then use Update permissions. Names, email addresses and phone numbers also require protected customer field access.
+        </p>}
 
         <div className="mt-8 space-y-3">
           <Link
