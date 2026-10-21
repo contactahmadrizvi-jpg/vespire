@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminDb } from "@/lib/firebase/admin";
+import RefreshButton from "./RefreshButton";
 
 export const dynamic = "force-dynamic";
 
@@ -85,15 +86,18 @@ export default async function StoreDetailPage({
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{shop}</p>
         </div>
         
-        <form action="/api/shopify/disconnect" method="POST">
-          <input type="hidden" name="shop" value={shop} />
-          <button
-            type="submit"
-            className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
-          >
-            Disconnect Store
-          </button>
-        </form>
+        <div className="flex gap-2">
+          <RefreshButton shop={shop} />
+          <form action="/api/shopify/disconnect" method="POST">
+            <input type="hidden" name="shop" value={shop} />
+            <button
+              type="submit"
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+            >
+              Disconnect Store
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Stats */}

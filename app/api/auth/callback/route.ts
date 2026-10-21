@@ -110,28 +110,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 7. Fetch products, orders, abandoned checkouts (async) ──────────
-  // Run in background and update Firestore after redirect
-  fetchAndSaveShopData(shop, accessToken).catch((err) => {
-    console.error("[Shopify OAuth] Background data fetch error:", err);
-  });
-
-  // ── 8. Redirect merchant to success page ────────────────────────────
-  const successUrl = new URL("/install/success", request.nextUrl.origin);
-  successUrl.searchParams.set("shop", shop);
-  return NextResponse.redirect(successUrl.toString());
-}
-
-/** Return a simple JSON error response with a consistent shape. */
-function errorResponse(message: string, status: number): NextResponse {
-  return NextResponse.json({ error: message }, { status });
-}
-
-/**
- * Background task: Fetch shop data and update Firestore.
- * This runs after the OAuth redirect so it doesn't block the user.
- */
-async function fetchAndSaveShopData(shop: string, accessToken: string) {
+  // ── 7. Fetch products, orders, abandoned checkouts synchronously ────
+  // Must complete BEFORE redirect in serverless environment
   try {
     const data = await fetchAllShopData(shop, accessToken);
     console.log(
@@ -139,7 +119,7 @@ async function fetchAndSaveShopData(shop: string, accessToken: string) {
       `Products: ${data.products.length}, Orders: ${data.orders.length}, Carts: ${data.abandonedCheckouts.length}`
     );
 
-    // Update Firestore with fetched data
+    // Update Firestore with fetched data immediately
     const { getAdminDb } = await import("@/lib/firebase/admin");
     const db = getAdminDb();
     
@@ -153,5 +133,16 @@ async function fetchAndSaveShopData(shop: string, accessToken: string) {
     console.log(`[Shopify OAuth] Shop data saved to Firestore for: ${shop}`);
   } catch (err) {
     console.error(`[Shopify OAuth] Failed to fetch/save data for ${shop}:`, err);
+    // Don't fail the install - user can manually refresh data later
   }
+
+  // ── 8. Redirect merchant to success page ────────────────────────────
+  const successUrl = new URL("/install/success", request.nextUrl.origin);
+  successUrl.searchParams.set("shop", shop);
+  return NextResponse.redirect(successUrl.toString());
+}
+
+/** Return a simple JSON error response with a consistent shape. */
+function errorResponse(message: string, status: number): NextResponse {
+  return NextResponse.json({ error: message }, { status });
 }
