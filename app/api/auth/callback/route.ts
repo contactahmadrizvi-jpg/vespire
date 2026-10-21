@@ -26,10 +26,7 @@ import {
   saveShopToken,
 } from "@/lib/shopify/token-exchange";
 import { 
-  fetchAllShopData,
-  type ShopifyProduct,
-  type ShopifyOrder,
-  type ShopifyAbandonedCheckout 
+  fetchAllShopData
 } from "@/lib/shopify/fetch-shop-data";
 
 export async function GET(request: NextRequest) {
@@ -101,49 +98,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 6. Fetch products, orders, abandoned checkouts FIRST ────────────
-  let products: ShopifyProduct[];
-  let orders: ShopifyOrder[];
-  let abandonedCheckouts: ShopifyAbandonedCheckout[];
-  
+  // ── 6. Persist shop + token in Firestore FIRST (basic info) ─────────
   try {
-    const data = await fetchAllShopData(shop, accessToken);
-    products = data.products;
-    orders = data.orders;
-    abandonedCheckouts = data.abandonedCheckouts;
-    console.log(`[Shopify OAuth] Shop data fetched for: ${shop} - Products: ${products.length}, Orders: ${orders.length}, Carts: ${abandonedCheckouts.length}`);
-  } catch (err) {
-    console.error("[Shopify OAuth] Post-install data fetch error:", err);
-    products = [];
-    orders = [];
-    abandonedCheckouts = [];
-  }
-
-  // ── 7. Persist EVERYTHING (token + data) in Firestore ───────────────
-  try {
-    const { FieldValue } = await import("firebase-admin/firestore");
-    const { getAdminDb } = await import("@/lib/firebase/admin");
-    const db = getAdminDb();
-    
-    await db.collection("shopify_installs").doc(shop).set({
-      shop,
-      accessToken,
-      scope,
-      installedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-      products,
-      orders,
-      abandoned_checkouts: abandonedCheckouts,
-    });
-    
-    console.log(`[Shopify OAuth] All data saved to Firestore for: ${shop}`);
+    await saveShopToken(shop, accessToken, scope);
+    console.log(`[Shopify OAuth] Credentials saved to Firestore for: ${shop}`);
   } catch (err) {
     console.error("[Shopify OAuth] Firestore write error:", err);
     return errorResponse(
-      "Failed to save shop data. Please try reconnecting.",
+      `Failed to save shop credentials: ${(err as Error).message}`,
       500,
     );
   }
+
+  // ── 7. Fetch products, orders, abandoned checkouts (async) ──────────
+  // Run in background and update Firestore after redirect
+  fetchAndSaveShopData(shop, accessToken).catch((err) => {
+    console.error("[Shopify OAuth] Background data fetch error:", err);
+  });
 
   // ── 8. Redirect merchant to success page ────────────────────────────
   const successUrl = new URL("/install/success", request.nextUrl.origin);
@@ -154,4 +125,33 @@ export async function GET(request: NextRequest) {
 /** Return a simple JSON error response with a consistent shape. */
 function errorResponse(message: string, status: number): NextResponse {
   return NextResponse.json({ error: message }, { status });
+}
+
+/**
+ * Background task: Fetch shop data and update Firestore.
+ * This runs after the OAuth redirect so it doesn't block the user.
+ */
+async function fetchAndSaveShopData(shop: string, accessToken: string) {
+  try {
+    const data = await fetchAllShopData(shop, accessToken);
+    console.log(
+      `[Shopify OAuth] Shop data fetched for: ${shop} - ` +
+      `Products: ${data.products.length}, Orders: ${data.orders.length}, Carts: ${data.abandonedCheckouts.length}`
+    );
+
+    // Update Firestore with fetched data
+    const { getAdminDb } = await import("@/lib/firebase/admin");
+    const db = getAdminDb();
+    
+    await db.collection("shopify_installs").doc(shop).update({
+      products: data.products,
+      orders: data.orders,
+      abandoned_checkouts: data.abandonedCheckouts,
+      lastDataFetch: new Date().toISOString(),
+    });
+    
+    console.log(`[Shopify OAuth] Shop data saved to Firestore for: ${shop}`);
+  } catch (err) {
+    console.error(`[Shopify OAuth] Failed to fetch/save data for ${shop}:`, err);
+  }
 }
