@@ -107,11 +107,28 @@ export async function GET(request: NextRequest) {
   }
 
   // ── 7. Post-install: fetch products, orders, abandoned checkouts ─────
-  // Run in the background — don't block the redirect on this.
-  // Errors are caught inside fetchAllShopData and logged individually.
-  fetchAllShopData(shop, accessToken).catch((err) => {
+  // Fetch the data and save it to Firestore immediately
+  try {
+    const { products, orders, abandonedCheckouts } = await fetchAllShopData(shop, accessToken);
+    
+    // Save fetched data to Firestore
+    const { getAdminDb } = await import("@/lib/firebase/admin");
+    const db = getAdminDb();
+    await db.collection("shopify_installs").doc(shop).set({
+      shop,
+      accessToken,
+      scope,
+      installedAt: new Date().toISOString(),
+      products,
+      orders,
+      abandoned_checkouts: abandonedCheckouts,
+    });
+    
+    console.log(`[Shopify OAuth] Shop data fetched and saved for: ${shop}`);
+  } catch (err) {
     console.error("[Shopify OAuth] Post-install data fetch error:", err);
-  });
+    // Continue even if data fetch fails - the token is already saved
+  }
 
   // ── 8. Redirect merchant to success page ────────────────────────────
   const successUrl = new URL("/install/success", request.nextUrl.origin);
