@@ -75,4 +75,4 @@ export const SHOPIFY_STATE_COOKIE = "shopify_oauth_state";
 export const SHOPIFY_STATE_COOKIE_MAX_AGE = 60 * 10; // seconds
 
 /** Shopify Admin REST API version to use for all requests. */
-export const SHOPIFY_API_VERSION = "2025-01";
+export const SHOPIFY_API_VERSION = "2026-10";
