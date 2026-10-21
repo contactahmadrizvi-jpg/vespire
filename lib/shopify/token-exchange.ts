@@ -31,6 +31,10 @@ export interface ShopCredential {
 
 /**
  * POST to Shopify's token endpoint and exchange `code` for an access token.
+ * 
+ * NOTE: As of API version 2025-01, Shopify requires expiring offline tokens.
+ * We request them explicitly via grant_options.
+ * 
  * Throws on any network or API error so the caller can return a proper 500.
  */
 export async function exchangeCodeForToken(
@@ -47,6 +51,8 @@ export async function exchangeCodeForToken(
       client_secret: SHOPIFY_API_SECRET(),
       code,
       redirect_uri: SHOPIFY_REDIRECT_URI(),
+      // Request expiring offline tokens (required for API 2025-01+)
+      grant_options: ["offline", "value"],
     }),
     // Abort if Shopify doesn't respond in 15 s
     signal: AbortSignal.timeout(15_000),

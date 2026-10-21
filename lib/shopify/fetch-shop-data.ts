@@ -116,18 +116,27 @@ export async function fetchProducts(
   shop: string,
   accessToken: string,
 ): Promise<ShopifyProduct[]> {
-  const url = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/products.json?limit=250`;
-  const products = await fetchAllPages<ShopifyProduct>(
-    url,
-    shop,
-    accessToken,
-    "products",
-  );
-  console.log(
-    `[Shopify] Fetched ${products.length} products from ${shop}`,
-  );
-  console.log("[Shopify] Products sample:", JSON.stringify(products.slice(0, 3), null, 2));
-  return products;
+  try {
+    const url = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/products.json?limit=250`;
+    console.log(`[Shopify] Fetching products from: ${url}`);
+    
+    const products = await fetchAllPages<ShopifyProduct>(
+      url,
+      shop,
+      accessToken,
+      "products",
+    );
+    console.log(
+      `[Shopify] ✅ Fetched ${products.length} products from ${shop}`,
+    );
+    if (products.length > 0) {
+      console.log("[Shopify] First product:", JSON.stringify(products[0], null, 2));
+    }
+    return products;
+  } catch (error) {
+    console.error(`[Shopify] ❌ Error fetching products:`, error);
+    throw error;
+  }
 }
 
 /** Fetch all orders (including closed/cancelled) from the store. */
@@ -135,19 +144,28 @@ export async function fetchOrders(
   shop: string,
   accessToken: string,
 ): Promise<ShopifyOrder[]> {
-  // `status=any` returns open, closed, and cancelled orders
-  const url = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders.json?limit=250&status=any`;
-  const orders = await fetchAllPages<ShopifyOrder>(
-    url,
-    shop,
-    accessToken,
-    "orders",
-  );
-  console.log(
-    `[Shopify] Fetched ${orders.length} orders from ${shop}`,
-  );
-  console.log("[Shopify] Orders sample:", JSON.stringify(orders.slice(0, 3), null, 2));
-  return orders;
+  try {
+    // `status=any` returns open, closed, and cancelled orders
+    const url = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders.json?limit=250&status=any`;
+    console.log(`[Shopify] Fetching orders from: ${url}`);
+    
+    const orders = await fetchAllPages<ShopifyOrder>(
+      url,
+      shop,
+      accessToken,
+      "orders",
+    );
+    console.log(
+      `[Shopify] ✅ Fetched ${orders.length} orders from ${shop}`,
+    );
+    if (orders.length > 0) {
+      console.log("[Shopify] First order:", JSON.stringify(orders[0], null, 2));
+    }
+    return orders;
+  } catch (error) {
+    console.error(`[Shopify] ❌ Error fetching orders:`, error);
+    throw error;
+  }
 }
 
 /**
