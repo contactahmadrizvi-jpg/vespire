@@ -19,12 +19,22 @@ import {
 export interface ShopifyAccessTokenResponse {
   access_token: string;
   scope: string;
+  expires_in?: number; // Seconds until token expires (for expiring tokens)
+  associated_user_scope?: string;
+  associated_user?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    email: string;
+    account_owner: boolean;
+  };
 }
 
 export interface ShopCredential {
   shop: string;
   accessToken: string;
   scope: string;
+  expiresAt?: string; // ISO date string when token expires
   installedAt: FirebaseFirestore.FieldValue;
   updatedAt: FirebaseFirestore.FieldValue;
 }
@@ -50,6 +60,9 @@ export async function exchangeCodeForToken(
       client_id: SHOPIFY_API_KEY(),
       client_secret: SHOPIFY_API_SECRET(),
       code,
+      // Request expiring offline tokens (required as of API version 2025-01)
+      // See: https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens
+      grant_options: ["offline"],
     }),
     // Abort if Shopify doesn't respond in 15 s
     signal: AbortSignal.timeout(15_000),
@@ -86,21 +99,32 @@ export async function saveShopToken(
   shop: string,
   accessToken: string,
   scope: string,
+  expiresIn?: number,
 ): Promise<void> {
   const { FieldValue } = await import("firebase-admin/firestore");
+
+  const data: any = {
+    shop,
+    accessToken,
+    scope,
+    updatedAt: FieldValue.serverTimestamp(),
+    // `installedAt` is only written on the first install (merge won't overwrite it)
+    installedAt: FieldValue.serverTimestamp(),
+  };
+
+  // If expiring token, calculate and store expiration time
+  if (expiresIn) {
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+    data.expiresAt = expiresAt.toISOString();
+    console.log(`[Token] Token expires at: ${expiresAt.toISOString()}`);
+  } else {
+    // Non-expiring token (shouldn't happen with new API versions)
+    data.expiresAt = null;
+    console.log(`[Token] Warning: Received non-expiring token`);
+  }
 
   await getAdminDb()
     .collection("shopify_installs")
     .doc(shop)
-    .set(
-      {
-        shop,
-        accessToken,
-        scope,
-        updatedAt: FieldValue.serverTimestamp(),
-        // `installedAt` is only written on the first install (merge won't overwrite it)
-        installedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    .set(data, { merge: true });
 }

@@ -83,12 +83,15 @@ export async function GET(request: NextRequest) {
   // ── 5. Exchange authorization code for access token ─────────────────
   let accessToken: string;
   let scope: string;
+  let expiresIn: number | undefined;
   try {
     const tokenResponse = await exchangeCodeForToken(shop, code);
     accessToken = tokenResponse.access_token;
     scope       = tokenResponse.scope;
+    expiresIn   = tokenResponse.expires_in;
     console.log(
-      `[Shopify OAuth] Token exchange successful for shop: ${shop}. Scopes: ${scope}`,
+      `[Shopify OAuth] Token exchange successful for shop: ${shop}. ` +
+      `Scopes: ${scope}, Expires in: ${expiresIn ? `${expiresIn}s` : 'never'}`,
     );
   } catch (err) {
     console.error("[Shopify OAuth] Token exchange error:", err);
@@ -128,7 +131,7 @@ export async function GET(request: NextRequest) {
     const { getAdminDb } = await import("@/lib/firebase/admin");
     const db = getAdminDb();
     
-    const docData = {
+    const docData: any = {
       shop,
       accessToken,
       scope,
@@ -140,11 +143,19 @@ export async function GET(request: NextRequest) {
       lastDataFetch: new Date().toISOString(),
     };
     
+    // Add expiration time if token expires
+    if (expiresIn) {
+      const expiresAt = new Date(Date.now() + expiresIn * 1000);
+      docData.expiresAt = expiresAt.toISOString();
+      console.log(`[Shopify OAuth] Token expires at: ${expiresAt.toISOString()}`);
+    }
+    
     console.log(`[Shopify OAuth] Document data summary:`, {
       shop,
       scope,
       productsCount: products.length,
       ordersCount: orders.length,
+      expiresIn: expiresIn ? `${expiresIn}s` : 'never',
     });
     
     await db.collection("shopify_installs").doc(shop).set(docData);
