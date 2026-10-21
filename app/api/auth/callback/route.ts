@@ -26,8 +26,8 @@ import {
   saveShopToken,
 } from "@/lib/shopify/token-exchange";
 import { 
-  fetchAllShopData
-} from "@/lib/shopify/fetch-shop-data";
+  fetchAllShopDataGraphQL
+} from "@/lib/shopify/graphql-fetch";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -98,20 +98,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 6. Fetch products, orders, abandoned checkouts FIRST ────────────
+  // ── 6. Fetch products, orders using GraphQL (avoids token issues) ────
   let products: any[] = [];
   let orders: any[] = [];
-  let abandonedCheckouts: any[] = [];
 
   try {
-    console.log(`[Shopify OAuth] Starting data fetch for: ${shop}`);
-    const data = await fetchAllShopData(shop, accessToken);
+    console.log(`[Shopify OAuth] Starting GraphQL data fetch for: ${shop}`);
+    const data = await fetchAllShopDataGraphQL(shop, accessToken);
     products = data.products;
     orders = data.orders;
-    abandonedCheckouts = data.abandonedCheckouts;
     console.log(
-      `[Shopify OAuth] ✅ Shop data fetched for: ${shop} - ` +
-      `Products: ${products.length}, Orders: ${orders.length}, Carts: ${abandonedCheckouts.length}`
+      `[Shopify OAuth] ✅ GraphQL data fetched for: ${shop} - ` +
+      `Products: ${products.length}, Orders: ${orders.length}`
     );
     
     // Log sample data
@@ -136,7 +134,7 @@ export async function GET(request: NextRequest) {
       scope,
       products,
       orders,
-      abandoned_checkouts: abandonedCheckouts,
+      abandoned_checkouts: [], // GraphQL doesn't have abandoned checkouts endpoint
       installedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       lastDataFetch: new Date().toISOString(),
@@ -147,7 +145,6 @@ export async function GET(request: NextRequest) {
       scope,
       productsCount: products.length,
       ordersCount: orders.length,
-      cartsCount: abandonedCheckouts.length,
     });
     
     await db.collection("shopify_installs").doc(shop).set(docData);

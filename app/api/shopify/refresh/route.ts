@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { fetchAllShopData } from "@/lib/shopify/fetch-shop-data";
+import { fetchAllShopDataGraphQL } from "@/lib/shopify/graphql-fetch";
 
 /**
  * POST /api/shopify/refresh
  * 
- * Manually refresh products, orders, and abandoned checkouts for a shop.
- * Useful when automatic sync during install fails or data needs updating.
+ * Manually refresh products and orders using GraphQL API
  */
 export async function POST(request: NextRequest) {
   try {
@@ -40,12 +39,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch fresh data from Shopify
-    console.log(`[Shopify Refresh] Starting fetch for: ${shop}`);
-    const data = await fetchAllShopData(shop, accessToken);
+    // Fetch fresh data from Shopify using GraphQL
+    console.log(`[Shopify Refresh] Starting GraphQL fetch for: ${shop}`);
+    const data = await fetchAllShopDataGraphQL(shop, accessToken);
     console.log(
       `[Shopify Refresh] ✅ Fetched data for: ${shop} - ` +
-      `Products: ${data.products.length}, Orders: ${data.orders.length}, Carts: ${data.abandonedCheckouts.length}`
+      `Products: ${data.products.length}, Orders: ${data.orders.length}`
     );
 
     // Update Firestore
@@ -53,7 +52,6 @@ export async function POST(request: NextRequest) {
     await db.collection("shopify_installs").doc(shop).update({
       products: data.products,
       orders: data.orders,
-      abandoned_checkouts: data.abandonedCheckouts,
       lastDataFetch: new Date().toISOString(),
     });
 
@@ -64,7 +62,6 @@ export async function POST(request: NextRequest) {
       counts: {
         products: data.products.length,
         orders: data.orders.length,
-        abandoned_checkouts: data.abandonedCheckouts.length,
       },
     });
   } catch (error) {
