@@ -5,7 +5,9 @@ const nextConfig: NextConfig = {
     return ["/api/:path*", "/shopify/:path*"].map(source => ({ source, headers: [
       { key: "Cache-Control", value: "no-store" },
       { key: "X-Content-Type-Options", value: "nosniff" },
-      { key: "Referrer-Policy", value: "no-referrer" },
+      // Native same-origin forms must retain Origin for CSRF verification.
+      // no-referrer makes their Origin "null", unlike ordinary fetch calls.
+      { key: "Referrer-Policy", value: "same-origin" },
     ] }));
   },
   experimental: {
