@@ -25,7 +25,12 @@ import {
   exchangeCodeForToken,
   saveShopToken,
 } from "@/lib/shopify/token-exchange";
-import { fetchAllShopData } from "@/lib/shopify/fetch-shop-data";
+import { 
+  fetchAllShopData,
+  type ShopifyProduct,
+  type ShopifyOrder,
+  type ShopifyAbandonedCheckout 
+} from "@/lib/shopify/fetch-shop-data";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -97,7 +102,10 @@ export async function GET(request: NextRequest) {
   }
 
   // ── 6. Fetch products, orders, abandoned checkouts FIRST ────────────
-  let products, orders, abandonedCheckouts;
+  let products: ShopifyProduct[];
+  let orders: ShopifyOrder[];
+  let abandonedCheckouts: ShopifyAbandonedCheckout[];
+  
   try {
     const data = await fetchAllShopData(shop, accessToken);
     products = data.products;
