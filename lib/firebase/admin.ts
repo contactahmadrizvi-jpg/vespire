@@ -24,7 +24,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 let _app: App | null = null;
 let _db: Firestore | null = null;
 
-function getAdminApp(): App {
+export function getAdminApp(): App {
   if (_app) return _app;
 
   // Already initialised (e.g. hot-reload in Next.js dev server)

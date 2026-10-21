@@ -1,5 +1,7 @@
+import { storeCollection } from "@/lib/security/access";
 import Link from "next/link";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { pageUser, audit } from "@/lib/security/access";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +9,10 @@ export const dynamic = "force-dynamic";
  * Lists all connected Shopify stores from Firestore.
  */
 export default async function StoresPage() {
+  const user = await pageUser();
   const db = getAdminDb();
-  const snapshot = await db.collection("shopify_installs").get();
+  const snapshot = await db.collection(storeCollection()).where("ownerUid", "==", user.uid).get();
+  await audit(user.uid, "account", "stores.view");
   
   const stores = snapshot.docs.map((doc) => ({
     shop: doc.id,

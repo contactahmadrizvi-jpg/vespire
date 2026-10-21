@@ -65,7 +65,7 @@ export default function InstallPage() {
 
   // If validated, show a direct link instead of JavaScript redirect
   if (validatedShop) {
-    const authUrl = `/api/auth?shop=${encodeURIComponent(validatedShop)}`;
+    const authUrl = `/connect?shop=${encodeURIComponent(validatedShop)}`;
     
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-black">

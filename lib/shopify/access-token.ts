@@ -1,3 +1,4 @@
+import { storeCollection } from "@/lib/security/access";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { SHOPIFY_API_KEY, SHOPIFY_API_SECRET, normaliseShop } from "./config";
 
@@ -15,7 +16,7 @@ export async function getShopAccessToken(rawShop: string): Promise<string> {
 }
 
 async function renew(shop: string): Promise<string> {
-  const ref = getAdminDb().collection("shopify_installs").doc(shop);
+  const ref = getAdminDb().collection(storeCollection()).doc(shop);
   const snapshot = await ref.get();
   const stored = snapshot.data();
   if (!stored?.accessToken) throw new Error("Reconnect your Shopify store.");

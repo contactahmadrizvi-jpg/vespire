@@ -1,6 +1,8 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { getAuth } from "firebase-admin/auth";
+import { getAdminApp } from "./admin";
 import {
   SESSION_COOKIE_MAX_AGE,
   SESSION_COOKIE_NAME,
@@ -16,9 +18,12 @@ import {
 
 /** Persist the Firebase ID token in an HTTP-only cookie so middleware can guard routes. */
 export async function setSessionCookie(idToken: string): Promise<void> {
+  const auth = getAuth(getAdminApp());
+  await auth.verifyIdToken(idToken, true);
+  const session = await auth.createSessionCookie(idToken, { expiresIn: SESSION_COOKIE_MAX_AGE * 1000 });
   const cookieStore = await cookies();
 
-  cookieStore.set(SESSION_COOKIE_NAME, idToken, {
+  cookieStore.set(SESSION_COOKIE_NAME, session, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

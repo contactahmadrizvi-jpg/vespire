@@ -11,7 +11,7 @@ import {
 } from "react";
 import {
   createUserWithEmailAndPassword,
-  onAuthStateChanged,
+  onIdTokenChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -72,13 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Safety net: stop showing the spinner after 5 s regardless.
     const timeout = setTimeout(() => setLoading(false), 5000);
 
-    const unsubscribe = onAuthStateChanged(
+    const unsubscribe = onIdTokenChanged(
       auth,
       async (firebaseUser) => {
         clearTimeout(timeout);
-        setUser(firebaseUser);
-        setLoading(false);
-
         try {
           if (firebaseUser) {
             const token = await firebaseUser.getIdToken();
@@ -86,10 +83,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             await clearSessionCookie();
           }
+          setUser(firebaseUser);
         } catch (err) {
           // Cookie sync failures are non-fatal — the client SDK still
           // has the auth state.  Log for debugging.
           console.warn("Session cookie sync failed:", err);
+          setUser(null);
+          setError("Could not verify your session. Please sign in again.");
+        } finally {
+          setLoading(false);
         }
       },
       (err) => {

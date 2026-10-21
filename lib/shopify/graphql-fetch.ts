@@ -1,6 +1,7 @@
 /** Shopify Admin GraphQL fetching and UI data mapping. */
 
 import { SHOPIFY_API_VERSION } from "./config";
+import { recentRecords } from "@/lib/security/retention";
 
 export interface ShopifyProduct {
   id: string;
@@ -160,8 +161,8 @@ export async function fetchOrdersGraphQL(
   accessToken: string
 ): Promise<any[]> {
   const query = `
-    query GetOrders($first: Int!, $after: String) {
-      orders(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
+    query GetOrders($first: Int!, $after: String, $since: String!) {
+      orders(first: $first, after: $after, query: $since, sortKey: CREATED_AT, reverse: true) {
         edges {
           node {
             id
@@ -201,6 +202,7 @@ export async function fetchOrdersGraphQL(
       const data = await graphqlRequest(shop, accessToken, query, {
         first: 50,
         after: cursor,
+        since: `created_at:>${new Date(Date.now() - 30 * 86400000).toISOString()}`,
       });
 
       const edges = data.orders.edges;
@@ -228,6 +230,7 @@ export interface AbandonedCheckout {
   id: string;
   name: string;
   customer_name: string | null;
+  customer_id: string | null;
   email: string | null;
   phone: string | null;
   sms_marketing_state: string;
@@ -245,6 +248,7 @@ interface CheckoutNode {
   createdAt: string;
   completedAt: string | null;
   customer: {
+    id: string;
     firstName: string | null;
     lastName: string | null;
     defaultEmailAddress: { emailAddress: string } | null;
@@ -260,14 +264,15 @@ interface CheckoutNode {
 /** Shopify exposes abandoned checkouts after the buyer provides contact details. */
 export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: string): Promise<AbandonedCheckout[]> {
   const query = `
-    query GetAbandonedCheckouts($first: Int!, $after: String, $includeCustomer: Boolean!) {
-      abandonedCheckouts(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
+    query GetAbandonedCheckouts($first: Int!, $after: String, $includeCustomer: Boolean!, $since: String!) {
+      abandonedCheckouts(first: $first, after: $after, query: $since, sortKey: CREATED_AT, reverse: true) {
         nodes {
           id
           name
           createdAt
           completedAt
           customer @include(if: $includeCustomer) {
+            id
             firstName
             lastName
             defaultEmailAddress { emailAddress }
@@ -289,7 +294,8 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
   while (true) {
     let data;
     try {
-      data = await graphqlRequest(shop, accessToken, query, { first: 25, after, includeCustomer });
+      data = await graphqlRequest(shop, accessToken, query, { first: 25, after, includeCustomer,
+        since: `created_at:>${new Date(Date.now() - 30 * 86400000).toISOString()}` });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Customer permission must not prevent loading otherwise accessible checkouts.
@@ -311,6 +317,7 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
         name: checkout.name,
         customer_details_available: includeCustomer,
         customer_name: [checkout.customer?.firstName, checkout.customer?.lastName].filter(Boolean).join(" ") || null,
+        customer_id: checkout.customer?.id ?? null,
         email: checkout.customer?.defaultEmailAddress?.emailAddress ?? null,
         phone: checkout.customer?.defaultPhoneNumber?.phoneNumber ?? null,
         sms_marketing_state: checkout.customer?.defaultPhoneNumber?.smsMarketingConsent?.state ?? "UNKNOWN",
@@ -327,7 +334,7 @@ export async function fetchAbandonedCheckoutsGraphQL(shop: string, accessToken: 
     }
     after = connection.pageInfo.endCursor;
   }
-  return checkouts;
+  return recentRecords(checkouts);
 }
 
 function transformProduct(product: any): any {
@@ -397,7 +404,7 @@ export async function fetchAllShopDataGraphQL(
   }
   return {
     products: productResult.status === "fulfilled" ? productResult.value.map(transformProduct) : [],
-    orders: orderResult.status === "fulfilled" ? orderResult.value.map(transformOrder) : [],
+    orders: orderResult.status === "fulfilled" ? recentRecords(orderResult.value.map(transformOrder)) : [],
     abandonedCheckouts: checkoutResult.status === "fulfilled" ? checkoutResult.value : [],
     errors,
   };

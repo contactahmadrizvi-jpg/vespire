@@ -1,11 +1,13 @@
 import { ReactNode } from "react";
 import Link from "next/link";
+import { pageUser } from "@/lib/security/access";
 
 /**
  * Layout for Shopify admin pages.
  * Shows navigation for stores, products, orders, etc.
  */
-export default function ShopifyLayout({ children }: { children: ReactNode }) {
+export default async function ShopifyLayout({ children }: { children: ReactNode }) {
+  await pageUser();
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black">
       {/* Top nav */}
@@ -16,6 +18,8 @@ export default function ShopifyLayout({ children }: { children: ReactNode }) {
               Vespire
             </Link>
             <nav className="hidden md:flex gap-6">
+              <Link href="/shopify/privacy-requests" className="text-sm underline">Data requests</Link>
+              <Link href="/privacy" className="text-sm underline">Privacy</Link>
               <Link href="/shopify/stores" className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
                 Stores
               </Link>

@@ -1,3 +1,4 @@
+import { storeCollection } from "@/lib/security/access";
 /**
  * Shopify OAuth token exchange + Firestore persistence.
  *
@@ -64,12 +65,6 @@ export async function exchangeCodeForToken(
   };
 
   console.log(`[Token Exchange] 🔄 Requesting token from Shopify...`);
-  console.log(`[Token Exchange] 📝 Request body includes:`, {
-    client_id: requestBody.client_id ? 'present' : 'MISSING',
-    client_secret: requestBody.client_secret ? 'present' : 'MISSING',
-    code: code ? `${code.substring(0, 15)}...` : 'MISSING',
-    expiring: requestBody.expiring,
-  });
 
   const response = await fetch(url, {
     method: "POST",
@@ -100,10 +95,10 @@ export async function exchangeCodeForToken(
     hasExpiresIn: data.expires_in !== undefined,
   });
 
-  if (!data.access_token) {
-    console.error(`[Token Exchange] ❌ No access_token in response:`, data);
+  if (!data.access_token || !data.refresh_token || !data.expires_in) {
+
     throw new Error(
-      "Shopify token exchange succeeded but response contained no access_token.",
+      "Shopify did not return the required expiring offline credentials.",
     );
   }
 
@@ -128,13 +123,18 @@ export async function saveShopToken(
   expiresIn?: number,
   refreshToken?: string,
   refreshTokenExpiresIn?: number,
+  ownerUid?: string,
 ): Promise<void> {
+  if (!ownerUid) throw new Error("A verified account is required to connect a store.");
   const { FieldValue } = await import("firebase-admin/firestore");
 
   const data: any = {
     shop,
     accessToken,
     scope,
+    ownerUid,
+    privacyVersion: "2026-10-22",
+    privacyAcceptedAt: new Date().toISOString(),
     updatedAt: FieldValue.serverTimestamp(),
     // `installedAt` is only written on the first install (merge won't overwrite it)
     installedAt: FieldValue.serverTimestamp(),
@@ -154,8 +154,12 @@ export async function saveShopToken(
   if (refreshToken) data.refreshToken = refreshToken;
   if (refreshTokenExpiresIn) data.refreshTokenExpiresAt = new Date(Date.now() + refreshTokenExpiresIn * 1000).toISOString();
 
-  await getAdminDb()
-    .collection("shopify_installs")
-    .doc(shop)
-    .set(data, { merge: true });
+  const db = getAdminDb();
+  const ref = db.collection(storeCollection()).doc(shop);
+  await db.runTransaction(async transaction => {
+    const existing = await transaction.get(ref);
+    if (existing.data()?.ownerUid && existing.data()?.ownerUid !== ownerUid) throw new Error("Store belongs to another account.");
+    if (existing.data()?.installedAt) data.installedAt = existing.data()!.installedAt;
+    transaction.set(ref, data, { merge: true });
+  });
 }

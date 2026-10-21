@@ -1,5 +1,7 @@
+import { storeCollection } from "@/lib/security/access";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { currentUser, audit, apiError } from "@/lib/security/access";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +13,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    const user = await currentUser();
     const db = getAdminDb();
-    const snapshot = await db.collection("shopify_installs").get();
+    const snapshot = await db.collection(storeCollection()).where("ownerUid", "==", user.uid).get();
+    await audit(user.uid, "account", "stores.list");
     
     const stores = snapshot.docs.map((doc) => ({
       shop: doc.id,
@@ -22,10 +26,6 @@ export async function GET() {
 
     return NextResponse.json({ stores });
   } catch (error) {
-    console.error("[API] Failed to fetch stores:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch stores" },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

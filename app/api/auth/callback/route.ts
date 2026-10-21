@@ -1,3 +1,5 @@
+import { saveShopData } from "@/lib/shopify/save-data";
+import { storeCollection } from "@/lib/security/access";
 /**
  * GET /api/auth/callback
  *
@@ -18,6 +20,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
+import { pageUser, audit } from "@/lib/security/access";
+import { getAdminDb } from "@/lib/firebase/admin";
 
 import { verifyHmac } from "@/lib/shopify/hmac";
 import { normaliseShop, SHOPIFY_STATE_COOKIE } from "@/lib/shopify/config";
@@ -30,6 +34,7 @@ import {
 } from "@/lib/shopify/graphql-fetch";
 
 export async function GET(request: NextRequest) {
+  const user = await pageUser();
   const { searchParams } = request.nextUrl;
 
   // ── 1. Extract required params ──────────────────────────────────────
@@ -64,13 +69,11 @@ export async function GET(request: NextRequest) {
 
   // ── 4. Validate state (CSRF check) ───────────────────────────────────
   const cookieStore = await cookies();
-  const cookieState = cookieStore.get(SHOPIFY_STATE_COOKIE)?.value;
+  let binding: { state?: string; uid?: string; shop?: string } = {};
+  try { binding = JSON.parse(cookieStore.get(SHOPIFY_STATE_COOKIE)?.value ?? "{}"); } catch { /* Invalid state is rejected below. */ }
+  const cookieState = binding.state;
 
-  if (!cookieState || cookieState !== state) {
-    console.error(
-      `[Shopify OAuth] State mismatch for shop: ${shop}. ` +
-        `Expected: ${cookieState}, Got: ${state}`,
-    );
+  if (!cookieState || cookieState !== state || binding.uid !== user.uid || binding.shop !== shop) {
     return errorResponse(
       "State mismatch. Possible CSRF attack. Request rejected.",
       403,
@@ -79,6 +82,10 @@ export async function GET(request: NextRequest) {
 
   // Clear the state cookie — it's single-use.
   cookieStore.delete(SHOPIFY_STATE_COOKIE);
+  const existing = await getAdminDb().collection(storeCollection()).doc(shop).get();
+  if (existing.data()?.ownerUid && existing.data()?.ownerUid !== user.uid) {
+    return errorResponse("This store belongs to another account.", 403);
+  }
 
   // ── 5. Exchange authorization code for access token ─────────────────
   let accessToken: string;
@@ -124,15 +131,10 @@ export async function GET(request: NextRequest) {
 
   // Save credentials before syncing: a data error must not lose the installation.
   try {
-    await saveShopToken(shop, accessToken, scope, expiresIn, refreshToken, refreshTokenExpiresIn);
-    const { getAdminDb } = await import("@/lib/firebase/admin");
+    await saveShopToken(shop, accessToken, scope, expiresIn, refreshToken, refreshTokenExpiresIn, user.uid);
+    await audit(user.uid, shop, "store.connect_and_accept_privacy");
     const data = await fetchAllShopDataGraphQL(shop, accessToken);
-    const updates: Record<string, unknown> = { syncErrors: data.errors };
-    if (!data.errors.products) updates.products = data.products;
-    if (!data.errors.orders) updates.orders = data.orders;
-    if (!data.errors.abandonedCheckouts) updates.abandoned_checkouts = data.abandonedCheckouts;
-    if (Object.keys(data.errors).length === 0) updates.lastDataFetch = new Date().toISOString();
-    await getAdminDb().collection("shopify_installs").doc(shop).update(updates);
+    await saveShopData(shop, data);
   } catch (err) {
     console.error("[Shopify OAuth] Installation sync failed:", err);
     return errorResponse("Could not save the Shopify connection. Please try connecting again.", 500);

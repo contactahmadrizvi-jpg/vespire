@@ -1,8 +1,11 @@
+import { saveShopData } from "@/lib/shopify/save-data";
+import { storeCollection } from "@/lib/security/access";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { fetchAllShopDataGraphQL } from "@/lib/shopify/graphql-fetch";
 import { normaliseShop } from "@/lib/shopify/config";
 import { getShopAccessToken } from "@/lib/shopify/access-token";
+import { currentUser, ownedStore, audit, sameOrigin, apiError } from "@/lib/security/access";
 
 /**
  * POST /api/shopify/refresh
@@ -11,6 +14,8 @@ import { getShopAccessToken } from "@/lib/shopify/access-token";
  */
 export async function POST(request: NextRequest) {
   try {
+    sameOrigin(request);
+    const user = await currentUser();
     const body = await request.json();
     let shop: string;
     try {
@@ -28,7 +33,8 @@ export async function POST(request: NextRequest) {
 
     // Get shop credentials from Firestore
     const db = getAdminDb();
-    const doc = await db.collection("shopify_installs").doc(shop).get();
+    const doc = await ownedStore(shop, user.uid);
+    await audit(user.uid, shop, "store.sync");
 
     if (!doc.exists) {
       return NextResponse.json(
@@ -56,12 +62,7 @@ export async function POST(request: NextRequest) {
 
     // Update Firestore
     console.log(`[Shopify Refresh] Updating Firestore for: ${shop}`);
-    const updates: Record<string, unknown> = { syncErrors: data.errors };
-    if (!data.errors.products) updates.products = data.products;
-    if (!data.errors.orders) updates.orders = data.orders;
-    if (!data.errors.abandonedCheckouts) updates.abandoned_checkouts = data.abandonedCheckouts;
-    if (Object.keys(data.errors).length === 0) updates.lastDataFetch = new Date().toISOString();
-    await db.collection("shopify_installs").doc(shop).update(updates);
+    await saveShopData(shop, data);
 
     if (Object.keys(data.errors).length) {
       return NextResponse.json({ error: Object.entries(data.errors).map(([resource, message]) => `${resource}: ${message}`).join(" "), partial: true }, { status: 502 });
@@ -78,10 +79,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API] Failed to refresh shop data:", error);
-    return NextResponse.json(
-      { error: "Failed to refresh shop data", details: (error as Error).message },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

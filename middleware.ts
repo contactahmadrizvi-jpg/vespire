@@ -15,8 +15,6 @@ import { SESSION_COOKIE_NAME } from "@/lib/firebase/constants";
  * auth check still happens client-side via the auth context.
  */
 
-const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasSession = !!request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -32,9 +30,8 @@ export function middleware(request: NextRequest) {
   }
 
   // ── Auth routes: redirect logged-in users to dashboard ──────────
-  if (AUTH_ROUTES.includes(pathname) && hasSession) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
+  // Authentication pages remain reachable for expired or revoked sessions.
+  // A cookie's presence alone must not be treated as verified authentication.
 
   return NextResponse.next();
 }

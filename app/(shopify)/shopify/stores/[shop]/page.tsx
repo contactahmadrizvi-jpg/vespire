@@ -1,7 +1,10 @@
+import { storeCollection } from "@/lib/security/access";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminDb } from "@/lib/firebase/admin";
 import RefreshButton from "./RefreshButton";
+import { pageUser, audit } from "@/lib/security/access";
+import { pruneStore } from "@/lib/security/retention";
 
 export const dynamic = "force-dynamic";
 
@@ -58,16 +61,20 @@ export default async function StoreDetailPage({
   params: Promise<{ shop: string }>;
 }) {
   const { shop } = await params;
+  const user = await pageUser();
   const db = getAdminDb();
   
-  const docRef = db.collection("shopify_installs").doc(shop);
-  const doc = await docRef.get();
+  const docRef = db.collection(storeCollection()).doc(shop);
+  let doc = await docRef.get();
 
-  if (!doc.exists) {
+  if (!doc.exists || doc.data()?.ownerUid !== user.uid) {
     notFound();
   }
+  await pruneStore(shop);
+  doc = await docRef.get();
 
   const storeData = doc.data();
+  await audit(user.uid, shop, "store.customer_data.view");
   const products = (storeData?.products || []) as Product[];
   const orders = (storeData?.orders || []) as Order[];
   const abandonedCheckouts = (storeData?.abandoned_checkouts || []) as AbandonedCheckout[];
@@ -111,8 +118,8 @@ export default async function StoreDetailPage({
         {Object.entries(storeData?.syncErrors ?? {}).map(([resource, message]) => (
           <p key={resource} className="text-red-600">{resource}: {String(message)}</p>
         ))}
-        <Link href={'/api/auth?shop=' + encodeURIComponent(shop)} className="inline-block underline">Reconnect store permissions</Link>
-        <p className="text-zinc-500">Shopify normally provides orders from the last 60 days. Older orders require additional access.</p>
+        <Link href={'/connect?shop=' + encodeURIComponent(shop)} className="inline-block underline">Reconnect store permissions</Link>
+        <p className="text-zinc-500">Orders and abandoned checkouts are limited to the last 30 days for privacy.</p>
       </div>
 
       {/* Stats */}

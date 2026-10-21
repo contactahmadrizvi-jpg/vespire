@@ -1,5 +1,8 @@
+import { storeCollection } from "@/lib/security/access";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { currentUser, ownedStore, audit, sameOrigin, apiError } from "@/lib/security/access";
+import { normaliseShop } from "@/lib/shopify/config";
 
 /**
  * POST /api/shopify/disconnect
@@ -8,8 +11,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
  */
 export async function POST(request: NextRequest) {
   try {
+    sameOrigin(request);
+    const user = await currentUser();
     const formData = await request.formData();
-    const shop = formData.get("shop") as string;
+    const shop = normaliseShop(String(formData.get("shop") ?? ""));
+    await ownedStore(shop, user.uid);
+    await audit(user.uid, shop, "store.disconnect_and_delete");
 
     if (!shop) {
       return NextResponse.json(
@@ -19,7 +26,16 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getAdminDb();
-    await db.collection("shopify_installs").doc(shop).delete();
+    await db.collection(storeCollection()).doc(shop).delete();
+    for (const suffix of ["privacy_requests", "audit"]) {
+      while (true) {
+        const docs = await db.collection(`${storeCollection()}_${suffix}`).where("shop", "==", shop).limit(200).get();
+        if (docs.empty) break;
+        const batch = db.batch();
+        for (const doc of docs.docs) batch.delete(doc.ref);
+        await batch.commit();
+      }
+    }
 
     console.log(`[Shopify] ✅ Disconnected store: ${shop}`);
 
@@ -27,10 +43,6 @@ export async function POST(request: NextRequest) {
     const installUrl = new URL("/install", request.url);
     return NextResponse.redirect(installUrl, 303);
   } catch (error) {
-    console.error("[API] ❌ Failed to disconnect store:", error);
-    return NextResponse.json(
-      { error: "Failed to disconnect store", details: (error as Error).message },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

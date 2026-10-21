@@ -15,6 +15,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
+import { pageUser, storeCollection, sameOrigin, apiError } from "@/lib/security/access";
+import { getAdminDb } from "@/lib/firebase/admin";
 import {
   normaliseShop,
   SHOPIFY_API_KEY,
@@ -22,10 +24,27 @@ import {
   SHOPIFY_SCOPES,
   SHOPIFY_STATE_COOKIE,
   SHOPIFY_STATE_COOKIE_MAX_AGE,
-  APP_URL,
 } from "@/lib/shopify/config";
 
 export async function GET(request: NextRequest) {
+  const url = new URL("/connect", request.url);
+  url.searchParams.set("shop", request.nextUrl.searchParams.get("shop") ?? "");
+  return NextResponse.redirect(url);
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    sameOrigin(request);
+    const form = await request.formData();
+    const url = new URL(request.url);
+    url.searchParams.set("shop", String(form.get("shop") ?? ""));
+    url.searchParams.set("privacy", String(form.get("privacy") ?? ""));
+    return await startOAuth({ url: url.toString(), nextUrl: url });
+  } catch (error) { return apiError(error); }
+}
+
+async function startOAuth(request: { url: string; nextUrl: URL }) {
+  const user = await pageUser();
   const { searchParams } = request.nextUrl;
   const rawShop = searchParams.get("shop");
 
@@ -47,6 +66,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (searchParams.get("privacy") !== "2026-10-22") {
+    return NextResponse.redirect(new URL(`/connect?shop=${encodeURIComponent(shop)}`, request.url));
+  }
+  const existing = await getAdminDb().collection(storeCollection()).doc(shop).get();
+  if (existing.data()?.ownerUid && existing.data()?.ownerUid !== user.uid) {
+    return NextResponse.json({ error: "This store belongs to another account." }, { status: 403 });
+  }
+
   // ── 2. Generate a random state nonce ────────────────────────────────
   // 32 bytes → 64 hex chars — enough entropy to prevent CSRF forgery.
   const stateBytes = new Uint8Array(32);
@@ -57,7 +84,7 @@ export async function GET(request: NextRequest) {
 
   // ── 3. Persist the nonce in an HTTP-only cookie ──────────────────────
   const cookieStore = await cookies();
-  cookieStore.set(SHOPIFY_STATE_COOKIE, state, {
+  cookieStore.set(SHOPIFY_STATE_COOKIE, JSON.stringify({ state, uid: user.uid, shop }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -73,11 +100,6 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set("state", state);
   // Offline access is the default; the code exchange requests expiration.
 
-
-  // Debug log - check Vercel function logs to see actual values
-  console.log('[OAuth] Redirect URI:', SHOPIFY_REDIRECT_URI());
-  console.log('[OAuth] APP_URL:', APP_URL());
-  console.log('[OAuth] Full auth URL:', authUrl.toString());
 
   return NextResponse.redirect(authUrl.toString());
 }
